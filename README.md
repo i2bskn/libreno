@@ -36,6 +36,8 @@ Cloudflare Workers・D1・R2の上で動きます。「Deploy to Cloudflare」�
 
 Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の前に自動でビルドされます。Workers Buildsでビルドコマンドを設定する必要はありません。
 
+デプロイには`pnpm run deploy`（`scripts/deploy.mjs`）が使われます。マイグレーションを適用してから`wrangler deploy`を実行し、新しいコードが動く前に表ができているようにします。初回でD1がまだないときだけは、D1・KV・R2を自動で作る`wrangler deploy`を先に実行してからマイグレーションを適用します（`wrangler d1 migrations apply`は既存のD1を探すだけで、作らないため）。表ができるまでの数秒間はWorkerが表のない状態で動きますが、まだ誰も使っていないので影響はありません。
+
 セットアップ画面では`JWT_SECRET`を入力します。`openssl rand -hex 32`で生成した値を使ってください。変更すると全員がログアウトします。
 
 デプロイ直後はパスワード認証で動きます。表示されたURLを開くと初期設定画面になり、**最初に登録した人が管理者になります**。URLを知った他人に先に登録されないように、デプロイしたらすぐ登録してください。
@@ -185,7 +187,7 @@ CookieにSecure属性と`__Host-`接頭辞を使っているので、`http://loc
 | `pnpm typecheck` | 型チェック（サーバーとWeb画面） |
 | `pnpm build:client` | Web画面を`dist/client`にビルドする |
 | `pnpm db:generate` | スキーマからマイグレーションを作る |
-| `pnpm run deploy` | 本番のD1にマイグレーションを適用してデプロイする（`pnpm deploy`はpnpm自体のコマンドなので`run`を付けてください） |
+| `pnpm run deploy` | 本番のD1にマイグレーションを適用してデプロイする（`pnpm deploy`はpnpm自体のコマンドなので`run`を付けてください）。Cloudflareのアカウントが複数あるときは`CLOUDFLARE_ACCOUNT_ID`にデプロイ先のアカウントIDを指定してください |
 
 ## ライセンス
 

@@ -152,6 +152,22 @@ describe("password login", () => {
     expect(api.headers.get("Cache-Control")).toBe("no-store");
   });
 
+  // Hono before 4.13.16 skipped wildcard middleware for paths with an encoded line terminator (GHSA-h7mg-cq63-vhpq).
+  it("runs the wildcard middleware for paths with an encoded line terminator", async () => {
+    for (const terminator of ["%0A", "%0D", "%E2%80%A8", "%E2%80%A9"]) {
+      const page = await send(`/auth/missing${terminator}`);
+      expect(page.status).toBe(404);
+      expect(page.headers.get("Cache-Control")).toBe("no-store");
+      expect(page.headers.get("Content-Security-Policy")).toBe("frame-ancestors 'none'");
+      expect(page.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      const api = await send(`/api/v1/missing${terminator}`);
+      expect(api.status).toBe(404);
+      expect(api.headers.get("Cache-Control")).toBe("no-store");
+      const crossSite = await send(`/api/v1/missing${terminator}`, { method: "POST", origin: "https://evil.example" });
+      expect(crossSite.status).toBe(403);
+    }
+  });
+
   it("returns 404 for the OIDC callback in password mode", async () => {
     expect((await send("/auth/oidc/callback?code=x&state=y")).status).toBe(404);
   });
