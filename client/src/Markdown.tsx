@@ -1,7 +1,11 @@
 import ReactMarkdown, { type Components } from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
 const remarkPlugins = [remarkGfm];
+
+// Colors code blocks that name a language, with hljs-* classes only (no style attributes, which the CSP blocks).
+const rehypePlugins = [rehypeHighlight];
 
 const remarkRehypeOptions = { footnoteLabel: "脚注", footnoteBackLabel: "本文に戻る" };
 
@@ -39,7 +43,12 @@ export function Markdown({ body, origin }: { body: string; origin: string }) {
 
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={remarkPlugins} remarkRehypeOptions={remarkRehypeOptions} components={components}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        remarkRehypeOptions={remarkRehypeOptions}
+        components={components}
+      >
         {body}
       </ReactMarkdown>
     </div>

@@ -32,6 +32,15 @@
   --code-bg: #1f2a2e;
   --code-ink: #e7eae3;
   --code-border: transparent;
+  /* Token colors in code blocks. Code blocks are dark in both themes, so these are not redefined for dark mode. */
+  --code-comment: #97a49f;
+  --code-keyword: #e9997a;
+  --code-string: #b2d193;
+  --code-number: #e0bd74;
+  --code-title: #94bfe6;
+  --code-type: #c9aee6;
+  --code-attr: #8fd0c4;
+  --code-deletion: #f2a7a7;
   --shadow: 0 1px 2px rgb(34 46 52 / 0.05), 0 8px 24px rgb(34 46 52 / 0.08);
 
   --kind-everyone: #1b6e60;
@@ -48,6 +57,8 @@
   --radius: 0.625rem;
   --radius-lg: 1rem;
   --measure: 46rem;
+  /* The widest that tables and code blocks grow to, past the column of text. */
+  --measure-wide: 72rem;
   /* The height of the header on a wide window, which the sidebar below it is fitted to. */
   --header-height: 4rem;
 }
@@ -701,6 +712,11 @@ p[role="alert"] {
 /* Narrow windows: the list of pages is in the drawer. The sidebar is not drawn there either. */
 .sidebar {
   display: none;
+}
+
+/* The screen next to the sidebar, which tables and code blocks in the body measure themselves against. */
+.layout-screen {
+  container-type: inline-size;
 }
 
 /* Wide windows: the list of pages is always next to the screen, which keeps its column in the space left. */
@@ -1792,6 +1808,70 @@ h2.spaces-heading {
   background: none;
 }
 
+/* Syntax highlighting: rehype-highlight adds hljs-* classes. Classes not listed here keep --code-ink.
+   Comments are not italic, since Japanese text would get a synthesized slant. */
+.markdown .hljs-comment,
+.markdown .hljs-quote,
+.markdown .hljs-meta {
+  color: var(--code-comment);
+}
+
+.markdown .hljs-keyword,
+.markdown .hljs-selector-tag,
+.markdown .hljs-meta .hljs-keyword,
+.markdown .hljs-doctag {
+  color: var(--code-keyword);
+}
+
+.markdown .hljs-string,
+.markdown .hljs-regexp,
+.markdown .hljs-addition,
+.markdown .hljs-meta .hljs-string {
+  color: var(--code-string);
+}
+
+.markdown .hljs-number,
+.markdown .hljs-literal,
+.markdown .hljs-symbol,
+.markdown .hljs-bullet {
+  color: var(--code-number);
+}
+
+.markdown .hljs-title,
+.markdown .hljs-section,
+.markdown .hljs-name {
+  color: var(--code-title);
+}
+
+.markdown .hljs-type,
+.markdown .hljs-built_in,
+.markdown .hljs-class .hljs-title,
+.markdown .hljs-title.class_ {
+  color: var(--code-type);
+}
+
+.markdown .hljs-attr,
+.markdown .hljs-attribute,
+.markdown .hljs-variable,
+.markdown .hljs-template-variable,
+.markdown .hljs-selector-class,
+.markdown .hljs-selector-id,
+.markdown .hljs-property {
+  color: var(--code-attr);
+}
+
+.markdown .hljs-deletion {
+  color: var(--code-deletion);
+}
+
+.markdown .hljs-emphasis {
+  font-style: italic;
+}
+
+.markdown .hljs-strong {
+  font-weight: 700;
+}
+
 /* Shadows at the edges that have more of the table to scroll to: the covers scroll with the table (local) and
    hide the shadows (scroll) when an edge is reached. */
 .markdown .table-wrap {
@@ -1805,6 +1885,21 @@ h2.spaces-heading {
     var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+
+/* In the body of a page, a table or code block that does not fit the column grows past it, centered on the
+   column, up to the gutters of the screen; one that fits keeps to the column. The top page and the preview of
+   the editor are drawn in boxes, so these stay inside them and scroll. */
+.page-body > .markdown > pre,
+.page-body > .markdown > .table-wrap,
+.main > .markdown > pre,
+.main > .markdown > .table-wrap {
+  position: relative;
+  left: 50%;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(100cqi - 2.5rem, var(--measure-wide));
+  translate: -50%;
 }
 
 .markdown table {

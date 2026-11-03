@@ -71,6 +71,37 @@ describe("Markdown", () => {
     expect(html).toMatch(/<h2[^>]*class="sr-only"[^>]*>脚注<\/h2>/);
     expect(html).toContain('aria-label="本文に戻る"');
   });
+
+  it("highlights code blocks that name a language, with classes only", () => {
+    const html = render("```js\nconst a = 1;\n```\n");
+    expect(html).toContain('<code class="hljs language-js">');
+    expect(html).toContain('<span class="hljs-keyword">const</span>');
+    // The CSP (style-src 'self') blocks style attributes.
+    expect(html).not.toContain("style=");
+  });
+
+  it("does not highlight code blocks without a language", () => {
+    expect(render("```\nconst a = 1;\n```\n")).not.toContain("hljs");
+  });
+
+  it("shows code blocks in an unknown language as they are", () => {
+    expect(() => render("```nosuchlang\nfoo <bar>\n```\n")).not.toThrow();
+    const html = render("```nosuchlang\nfoo <bar>\n```\n");
+    expect(html).toContain("foo &lt;bar&gt;");
+    expect(html).not.toContain('<span class="hljs-');
+  });
+
+  it("keeps HTML in code blocks escaped", () => {
+    const html = render("```html\n<script>alert(1)</script>\n```\n");
+    expect(html).not.toContain("<script");
+    expect(html).toContain("&lt;");
+  });
+
+  it("does not highlight inline code", () => {
+    const html = render("文中の `const a`");
+    expect(html).toContain("<code>const a</code>");
+    expect(html).not.toContain("hljs");
+  });
 });
 
 describe("isExternalLink", () => {
