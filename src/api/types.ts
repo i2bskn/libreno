@@ -61,6 +61,8 @@ export type Space = {
   kind: SpaceKind;
   // null for personal spaces; clients decide the display name.
   name: string | null;
+  // Display order: smaller comes first. Personal spaces always come last.
+  sort_order: number;
   // UNIX time in milliseconds.
   created_at: number;
   // UNIX time in milliseconds.
@@ -84,7 +86,14 @@ export type CreateSpaceInput = {
 };
 
 export type UpdateSpaceRequest = {
-  name: string;
+  name?: string;
+  sort_order?: number;
+};
+
+// UpdateSpaceRequest after validation. name is trimmed.
+export type UpdateSpaceInput = {
+  name?: string;
+  sortOrder?: number;
 };
 
 // Folders organize pages inside one space and carry no permissions of their own.

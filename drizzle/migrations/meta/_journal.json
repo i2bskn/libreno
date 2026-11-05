@@ -57,6 +57,13 @@
       "when": 1793376549876,
       "tag": "0007_site_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793818356756,
+      "tag": "0008_space_sort_order",
+      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,8 @@ export const spaces = sqliteTable(
     name: text("name"),
     // Set only for personal spaces. Not deleted in cascade.
     ownerUserId: text("owner_user_id").references(() => users.id),
+    // Display order: smaller comes first. Not used for personal spaces, which always come last.
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

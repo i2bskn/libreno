@@ -37,6 +37,7 @@ export function toApiSpace(space: SpaceRow): Space {
     id: space.id,
     kind: space.kind,
     name: space.name,
+    sort_order: space.sortOrder,
     created_at: space.createdAt,
     updated_at: space.updatedAt,
   };

@@ -1,6 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { asc } from "drizzle-orm";
 import { z } from "zod";
 import type {
   AttachmentList,
@@ -81,7 +80,7 @@ import {
   toApiTrashedPage,
 } from "../routes/api";
 import { accessibleSpacesWhere, canAccessSpace, type VisibilityNotAcknowledged } from "../spaces/access";
-import { findSpaceById } from "../spaces/queries";
+import { findSpaceById, spaceListOrder } from "../spaces/queries";
 
 export type ToolDeps = { db: Db; user: UserRow; attachments: R2Bucket };
 
@@ -131,7 +130,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
     "list_spaces",
     {
       description:
-        "List the spaces the signed-in user can access, in creation order. Each space has an id, a kind and a name. " +
+        "List the spaces the signed-in user can access, by sort_order ascending (creation order for equal values), " +
+        "with the personal space last. Each space has an id, a kind, a name and a sort_order. " +
         "kind is 'everyone' (all users), 'admin' (admins only) or 'personal'. " +
         "The personal space (kind=personal, name=null) belongs to the calling user and is private to them. " +
         "Use a space id with list_pages.",
@@ -143,7 +143,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
           .select()
           .from(spaces)
           .where(accessibleSpacesWhere(user))
-          .orderBy(asc(spaces.createdAt), asc(spaces.id))
+          .orderBy(...spaceListOrder)
           .all();
         const body: SpaceList = { spaces: rows.map(toApiSpace) };
         return jsonResult(body);

@@ -28,7 +28,7 @@ import {
   loadUsersView,
 } from "./load";
 
-const SPACE: Space = { id: "s1", kind: "everyone", name: "開発", created_at: 1, updated_at: 2 };
+const SPACE: Space = { id: "s1", kind: "everyone", name: "開発", sort_order: 0, created_at: 1, updated_at: 2 };
 const SUMMARY: PageSummary = {
   id: "p1",
   space_id: "s1",
@@ -692,7 +692,7 @@ describe("loadFolderView", () => {
 
 describe("loadSearchView", () => {
   const HIT: SearchHit = { ...SUMMARY, snippet: "…手順…" };
-  const PERSONAL: Space = { id: "s2", kind: "personal", name: null, created_at: 1, updated_at: 2 };
+  const PERSONAL: Space = { id: "s2", kind: "personal", name: null, sort_order: 0, created_at: 1, updated_at: 2 };
   const SEARCH_URL = "/api/v1/search?q=%E6%89%8B%E9%A0%86";
 
   it("shows the hits with the names of their spaces", async () => {

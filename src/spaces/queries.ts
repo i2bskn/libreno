@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { spaces, type SpaceRow } from "../db/schema";
 
@@ -14,6 +14,14 @@ export function insertPersonalSpaceStatement(d1: D1Database, userId: string, now
     )
     .bind(crypto.randomUUID(), userId, now);
 }
+
+// The order of space lists: personal spaces last, the others by sort_order, then in creation order.
+export const spaceListOrder = [
+  asc(sql`CASE WHEN ${spaces.kind} = 'personal' THEN 1 ELSE 0 END`),
+  asc(spaces.sortOrder),
+  asc(spaces.createdAt),
+  asc(spaces.id),
+];
 
 export function findSpaceById(db: Db, id: string): Promise<SpaceRow | undefined> {
   return db.select().from(spaces).where(eq(spaces.id, id)).get();

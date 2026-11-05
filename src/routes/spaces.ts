@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type {
   CreateSpaceInput,
   CreateSpaceRequest,
@@ -7,6 +7,7 @@ import type {
   PageList,
   SpaceList,
   TrashList,
+  UpdateSpaceInput,
   UpdateSpaceRequest,
 } from "../api/types";
 import { clock } from "../clock";
@@ -21,17 +22,21 @@ import { listPageSummaries } from "../pages/queries";
 import { createPage } from "../pages/service";
 import { listTrash } from "../pages/trash";
 import { accessibleSpacesWhere, canAccessSpace } from "../spaces/access";
-import { findSpaceById } from "../spaces/queries";
+import { findSpaceById, spaceListOrder } from "../spaces/queries";
 import { jsonBody, toApiFolder, toApiPage, toApiPageSummary, toApiSpace, toApiTrashedPage } from "./api";
 import { createFolderBody } from "./folders";
 import { createPageBody } from "./pages";
 
 const SPACE_NAME_MAX_LENGTH = 100;
+const SPACE_SORT_ORDER_MIN = -1000000;
+const SPACE_SORT_ORDER_MAX = 1000000;
 const CONTROL_CHARACTER = /\p{Cc}/u;
 
 const spaceNotFound = "スペースが見つかりません";
 const invalidName = "スペースの名前は 1 文字以上 100 文字以下で、改行を含まない文字列にしてください";
 const nameTaken = "この名前のスペースはすでにあります";
+const emptySpaceUpdate = "変更する項目（name か sort_order）を指定してください";
+const invalidSortOrder = "表示順は -1000000 以上 1000000 以下の整数にしてください";
 
 // Returns the trimmed name, or null if invalid. Length is counted in code points; no Unicode normalization.
 function normalizeSpaceName(value: unknown): string | null {
@@ -40,6 +45,15 @@ function normalizeSpaceName(value: unknown): string | null {
   const length = [...name].length;
   if (length < 1 || length > SPACE_NAME_MAX_LENGTH || CONTROL_CHARACTER.test(name)) return null;
   return name;
+}
+
+function isValidSortOrder(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= SPACE_SORT_ORDER_MIN &&
+    value <= SPACE_SORT_ORDER_MAX
+  );
 }
 
 function isCreatableKind(value: unknown): value is CreateSpaceInput["kind"] {
@@ -55,10 +69,22 @@ const createSpaceBody = jsonBody<CreateSpaceRequest, CreateSpaceInput>((body, c)
   return { ok: true, value: { kind: body.kind, name } };
 });
 
-const updateSpaceBody = jsonBody<UpdateSpaceRequest, UpdateSpaceRequest>((body, c) => {
-  const name = normalizeSpaceName(body.name);
-  if (name === null) return apiError(c, 400, "invalid_name", invalidName);
-  return { ok: true, value: { name } };
+// Validated in the order name, sort_order.
+const updateSpaceBody = jsonBody<UpdateSpaceRequest, UpdateSpaceInput>((body, c) => {
+  if (body.name === undefined && body.sort_order === undefined) {
+    return apiError(c, 400, "empty_update", emptySpaceUpdate);
+  }
+  const value: UpdateSpaceInput = {};
+  if (body.name !== undefined) {
+    const name = normalizeSpaceName(body.name);
+    if (name === null) return apiError(c, 400, "invalid_name", invalidName);
+    value.name = name;
+  }
+  if (body.sort_order !== undefined) {
+    if (!isValidSortOrder(body.sort_order)) return apiError(c, 400, "invalid_sort_order", invalidSortOrder);
+    value.sortOrder = body.sort_order;
+  }
+  return { ok: true, value };
 });
 
 const spacesApi = new Hono<AppEnv>()
@@ -68,7 +94,7 @@ const spacesApi = new Hono<AppEnv>()
       .select()
       .from(spaces)
       .where(accessibleSpacesWhere(c.get("user")))
-      .orderBy(asc(spaces.createdAt), asc(spaces.id))
+      .orderBy(...spaceListOrder)
       .all();
     const body: SpaceList = { spaces: rows.map(toApiSpace) };
     return c.json(body, 200);
@@ -103,15 +129,18 @@ const spacesApi = new Hono<AppEnv>()
     if (!space || !canAccessSpace(c.get("user"), space)) return apiError(c, 404, "not_found", spaceNotFound);
     // Only the owner can see a personal space here, so there is nothing to hide: 403 rather than 404.
     if (space.kind === "personal") {
-      return apiError(c, 403, "forbidden", "個人スペースの名前は変更できません");
+      return apiError(c, 403, "forbidden", "個人スペースは変更できません");
     }
-    if (space.name === input.name) return c.json(toApiSpace(space), 200);
+    const changes: { name?: string; sortOrder?: number } = {};
+    if (input.name !== undefined && input.name !== space.name) changes.name = input.name;
+    if (input.sortOrder !== undefined && input.sortOrder !== space.sortOrder) changes.sortOrder = input.sortOrder;
+    if (Object.keys(changes).length === 0) return c.json(toApiSpace(space), 200);
 
     let updated;
     try {
       updated = await db
         .update(spaces)
-        .set({ name: input.name, updatedAt: clock.now() })
+        .set({ ...changes, updatedAt: clock.now() })
         .where(eq(spaces.id, space.id))
         .returning()
         .get();

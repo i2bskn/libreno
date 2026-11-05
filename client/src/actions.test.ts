@@ -14,6 +14,7 @@ import {
   movePage,
   purgeTrashedPage,
   renameSpace,
+  updateSpaceSortOrder,
   resetUserPassword,
   restoreRevision,
   restoreTrashedPage,
@@ -526,7 +527,7 @@ describe("moveFolder", () => {
 describe("createSpace", () => {
   const url = "/api/v1/spaces";
   const input = { kind: "admin", name: "運用" } as const;
-  const SPACE: Space = { id: "s2", kind: "admin", name: "運用", created_at: 1, updated_at: 1 };
+  const SPACE: Space = { id: "s2", kind: "admin", name: "運用", sort_order: 0, created_at: 1, updated_at: 1 };
 
   it("sends the kind and the name and is ok with the space on 201", async () => {
     const { client, fetch } = setup(() => Response.json(SPACE, { status: 201 }), 401, url);
@@ -645,6 +646,39 @@ describe("renameSpace", () => {
   it("is redirecting when login is required", async () => {
     const { client } = setup(apiError(401, "ログインしてください"), 401, url);
     expect(await renameSpace(client, "s1", "a")).toEqual({ kind: "redirecting" });
+  });
+});
+
+describe("updateSpaceSortOrder", () => {
+  const url = "/api/v1/spaces/s1";
+
+  it("sends the sort_order and is ok on 200", async () => {
+    const { client, fetch } = setup(() => Response.json({}), 401, url);
+    expect(await updateSpaceSortOrder(client, "s1", -3)).toEqual({ kind: "ok" });
+    const init = fetch.mock.calls[0]?.[1];
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ sort_order: -3 });
+  });
+
+  it("is not found on 404", async () => {
+    const { client } = setup(apiError(404, "スペースが見つかりません"), 401, url);
+    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "notFound" });
+  });
+
+  it("is an error with the API message on 400", async () => {
+    const message = "表示順は -1000000 以上 1000000 以下の整数にしてください";
+    const { client } = setup(apiError(400, message), 401, url);
+    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "error", message });
+  });
+
+  it("is unknown when fetch rejects", async () => {
+    const { client } = setup(() => Promise.reject(new TypeError("Failed to fetch")), 401, url);
+    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "unknown" });
+  });
+
+  it("is redirecting when login is required", async () => {
+    const { client } = setup(apiError(401, "ログインしてください"), 401, url);
+    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "redirecting" });
   });
 });
 

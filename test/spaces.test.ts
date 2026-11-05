@@ -32,10 +32,15 @@ function setNow(now: number) {
   vi.spyOn(clock, "now").mockReturnValue(now);
 }
 
-async function insertSpace(kind: "everyone" | "admin", name: string, createdAt = T0): Promise<SpaceRow> {
+async function insertSpace(
+  kind: "everyone" | "admin",
+  name: string,
+  createdAt = T0,
+  sortOrder = 0,
+): Promise<SpaceRow> {
   const [space] = await db
     .insert(spaces)
-    .values({ id: crypto.randomUUID(), kind, name, createdAt, updatedAt: createdAt })
+    .values({ id: crypto.randomUUID(), kind, name, sortOrder, createdAt, updatedAt: createdAt })
     .returning();
   if (!space) throw new Error("failed to create space");
   return space;
@@ -95,7 +100,7 @@ describe("space access", () => {
 });
 
 describe("GET /api/v1/spaces", () => {
-  it("lists only accessible spaces in created_at order", async () => {
+  it("lists only accessible spaces in created_at order, with the personal space last", async () => {
     const everyone = await insertSpace("everyone", "Everyone", T0 + 1);
     const adminOnly = await insertSpace("admin", "Admins", T0 + 2);
     const adminPersonal = await personalSpaceOf(admin);
@@ -103,18 +108,34 @@ describe("GET /api/v1/spaces", () => {
 
     const asMember = await send("/api/v1/spaces", { cookies: memberCookies });
     expect(asMember.status).toBe(200);
-    expect(((await asMember.json()) as SpaceList).spaces.map((s) => s.id)).toEqual([memberPersonal.id, everyone.id]);
+    expect(((await asMember.json()) as SpaceList).spaces.map((s) => s.id)).toEqual([everyone.id, memberPersonal.id]);
 
     const asAdmin = await send("/api/v1/spaces", { cookies: adminCookies });
     const body = (await asAdmin.json()) as SpaceList;
-    expect(body.spaces.map((s) => s.id)).toEqual([adminPersonal.id, everyone.id, adminOnly.id]);
-    expect(body.spaces[0]).toEqual({
+    expect(body.spaces.map((s) => s.id)).toEqual([everyone.id, adminOnly.id, adminPersonal.id]);
+    expect(body.spaces[2]).toEqual({
       id: adminPersonal.id,
       kind: "personal",
       name: null,
+      sort_order: 0,
       created_at: admin.createdAt,
       updated_at: admin.createdAt,
     });
+  });
+
+  it("lists spaces by sort_order, then created_at, with the personal space last whatever its sort_order", async () => {
+    const third = await insertSpace("everyone", "Third", T0 + 1, 5);
+    const first = await insertSpace("admin", "First", T0 + 2, -3);
+    const second = await insertSpace("everyone", "Second", T0 + 3, 0);
+    const fourth = await insertSpace("everyone", "Fourth", T0 + 4, 5);
+    const adminPersonal = await personalSpaceOf(admin);
+    await db.update(spaces).set({ sortOrder: -10 }).where(eq(spaces.id, adminPersonal.id));
+
+    const res = await send("/api/v1/spaces", { cookies: adminCookies });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as SpaceList;
+    expect(body.spaces.map((s) => s.id)).toEqual([first.id, second.id, third.id, fourth.id, adminPersonal.id]);
+    expect(body.spaces.map((s) => s.sort_order)).toEqual([-3, 0, 5, 5, -10]);
   });
 
   it("returns 401 without a session", async () => {
@@ -140,7 +161,14 @@ describe("GET /api/v1/spaces/:id", () => {
     const everyone = await insertSpace("everyone", "Everyone");
     const res = await send(`/api/v1/spaces/${everyone.id}`, { cookies: memberCookies });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: everyone.id, kind: "everyone", name: "Everyone", created_at: T0, updated_at: T0 });
+    expect(await res.json()).toEqual({
+      id: everyone.id,
+      kind: "everyone",
+      name: "Everyone",
+      sort_order: 0,
+      created_at: T0,
+      updated_at: T0,
+    });
   });
 
   it("returns 404 for inaccessible and unknown spaces", async () => {
@@ -164,7 +192,14 @@ describe("POST /api/v1/spaces", () => {
     const res = await send("/api/v1/spaces", { cookies: adminCookies, json: { kind: "admin", name: "  Admins  " } });
     expect(res.status).toBe(201);
     const body = (await res.json()) as Space;
-    expect(body).toEqual({ id: expect.stringMatching(UUID_V4), kind: "admin", name: "Admins", created_at: T0, updated_at: T0 });
+    expect(body).toEqual({
+      id: expect.stringMatching(UUID_V4),
+      kind: "admin",
+      name: "Admins",
+      sort_order: 0,
+      created_at: T0,
+      updated_at: T0,
+    });
     const row = await db.query.spaces.findFirst({ where: eq(spaces.id, body.id) });
     expect(row).toMatchObject({ kind: "admin", name: "Admins", ownerUserId: null });
   });
@@ -218,7 +253,111 @@ describe("PATCH /api/v1/spaces/:id", () => {
     setNow(T0 + 1000);
     const res = await send(`/api/v1/spaces/${space.id}`, { method: "PATCH", cookies: adminCookies, json: { name: " New " } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: space.id, kind: "everyone", name: "New", created_at: T0, updated_at: T0 + 1000 });
+    expect(await res.json()).toEqual({
+      id: space.id,
+      kind: "everyone",
+      name: "New",
+      sort_order: 0,
+      created_at: T0,
+      updated_at: T0 + 1000,
+    });
+  });
+
+  it("changes only sort_order and updates updated_at", async () => {
+    const space = await insertSpace("everyone", "Ordered");
+    setNow(T0 + 1000);
+    const res = await send(`/api/v1/spaces/${space.id}`, { method: "PATCH", cookies: adminCookies, json: { sort_order: 3 } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      id: space.id,
+      kind: "everyone",
+      name: "Ordered",
+      sort_order: 3,
+      created_at: T0,
+      updated_at: T0 + 1000,
+    });
+    expect(await db.query.spaces.findFirst({ where: eq(spaces.id, space.id) })).toMatchObject({
+      name: "Ordered",
+      sortOrder: 3,
+      updatedAt: T0 + 1000,
+    });
+  });
+
+  it("changes name and sort_order together", async () => {
+    const space = await insertSpace("everyone", "Old");
+    setNow(T0 + 1000);
+    const res = await send(`/api/v1/spaces/${space.id}`, {
+      method: "PATCH",
+      cookies: adminCookies,
+      json: { name: "New", sort_order: -2 },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ name: "New", sort_order: -2, updated_at: T0 + 1000 });
+  });
+
+  it("returns 200 without writing for the same sort_order", async () => {
+    const space = await insertSpace("everyone", "Same", T0, 4);
+    setNow(T0 + 1000);
+    const res = await send(`/api/v1/spaces/${space.id}`, {
+      method: "PATCH",
+      cookies: adminCookies,
+      json: { name: "Same", sort_order: 4 },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ sort_order: 4, updated_at: T0 });
+    expect((await db.query.spaces.findFirst({ where: eq(spaces.id, space.id) }))?.updatedAt).toBe(T0);
+  });
+
+  it("accepts sort_order at the bounds", async () => {
+    const space = await insertSpace("everyone", "Bounds");
+    for (const sortOrder of [1000000, -1000000]) {
+      const res = await send(`/api/v1/spaces/${space.id}`, {
+        method: "PATCH",
+        cookies: adminCookies,
+        json: { sort_order: sortOrder },
+      });
+      expect(res.status, String(sortOrder)).toBe(200);
+      expect(((await res.json()) as Space).sort_order).toBe(sortOrder);
+    }
+  });
+
+  it("returns 400 empty_update and invalid_sort_order", async () => {
+    const space = await insertSpace("everyone", "Everyone");
+    const cases: [unknown, string][] = [
+      [{}, "empty_update"],
+      [{ sort_order: "1" }, "invalid_sort_order"],
+      [{ sort_order: null }, "invalid_sort_order"],
+      [{ sort_order: 1.5 }, "invalid_sort_order"],
+      [{ sort_order: 1000001 }, "invalid_sort_order"],
+      [{ sort_order: -1000001 }, "invalid_sort_order"],
+      [{ sort_order: 1e7 }, "invalid_sort_order"],
+      [{ name: " ", sort_order: 1.5 }, "invalid_name"],
+    ];
+    for (const [json, code] of cases) {
+      const res = await send(`/api/v1/spaces/${space.id}`, { method: "PATCH", cookies: adminCookies, json });
+      expect(res.status, JSON.stringify(json)).toBe(400);
+      expect(await errorCode(res), JSON.stringify(json)).toBe(code);
+    }
+    expect(await db.query.spaces.findFirst({ where: eq(spaces.id, space.id) })).toEqual(space);
+  });
+
+  it("returns 403 for sort_order on the personal space and to members", async () => {
+    const personal = await send(`/api/v1/spaces/${(await personalSpaceOf(admin)).id}`, {
+      method: "PATCH",
+      cookies: adminCookies,
+      json: { sort_order: 1 },
+    });
+    expect(personal.status).toBe(403);
+    expect(await errorCode(personal)).toBe("forbidden");
+
+    const space = await insertSpace("everyone", "Everyone");
+    const asMember = await send(`/api/v1/spaces/${space.id}`, {
+      method: "PATCH",
+      cookies: memberCookies,
+      json: { sort_order: 1 },
+    });
+    expect(asMember.status).toBe(403);
+    expect((await db.query.spaces.findFirst({ where: eq(spaces.id, space.id) }))?.sortOrder).toBe(0);
   });
 
   it("returns 200 without writing for the same name", async () => {

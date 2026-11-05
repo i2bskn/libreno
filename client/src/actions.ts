@@ -316,6 +316,17 @@ export async function renameSpace(client: ApiClient, spaceId: string, name: stri
   );
 }
 
+// Changes the display order of a space other than a personal space. Admins only. Never rejects.
+export async function updateSpaceSortOrder(
+  client: ApiClient,
+  spaceId: string,
+  sortOrder: number,
+): Promise<SpaceActionResult> {
+  return resourceActionResult(
+    await send(() => client.api.v1.spaces[":id"].$patch({ param: { id: spaceId }, json: { sort_order: sortOrder } })),
+  );
+}
+
 // Deletes an empty space other than a personal space. Admins only. Never rejects.
 export async function deleteSpace(client: ApiClient, spaceId: string): Promise<SpaceActionResult> {
   return resourceActionResult(await send(() => client.api.v1.spaces[":id"].$delete({ param: { id: spaceId } })));

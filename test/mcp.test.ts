@@ -444,11 +444,16 @@ describe("MCP", () => {
   it("returns the same spaces as the REST API for a member and an admin", async () => {
     await insertSpace("everyone", "Everyone");
     await insertSpace("admin", "Admins");
+    const later = await insertSpace("everyone", "Later");
+    // The space created last comes first, and the personal space stays last.
+    await db.update(spaces).set({ sortOrder: -1 }).where(eq(spaces.id, later.id));
     for (const cookies of [memberCookies, adminCookies]) {
       const { access_token } = await authorizeClient(cookies);
       const rest = (await (await send("/api/v1/spaces", { cookies })).json()) as SpaceList;
       const result = toolJson<SpaceList>(await callTool(access_token, "list_spaces"));
       expect(result).toEqual(rest);
+      expect(result.spaces[0]?.id).toBe(later.id);
+      expect(result.spaces.at(-1)?.kind).toBe("personal");
     }
   });
 
