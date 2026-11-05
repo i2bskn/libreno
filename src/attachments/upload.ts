@@ -61,7 +61,10 @@ export async function readHead(stream: ReadableStream<Uint8Array>, minBytes: num
 
 export type ReceiveUploadResult =
   | { ok: true; attachment: AttachmentRow }
-  | { ok: false; error: "empty_file" | "file_too_large" | "unsupported_type" | "upload_failed" | "not_found" };
+  | {
+      ok: false;
+      error: "empty_file" | "file_too_large" | "unsupported_type" | "upload_failed" | "not_found" | "space_archived";
+    };
 
 // Checks the size, then the type, then attaches the body of request to the page. filename is normalized,
 // without the extension. The errors come in the same order on both paths; the page is checked last, by

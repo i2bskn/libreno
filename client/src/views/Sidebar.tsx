@@ -14,13 +14,13 @@ export function Sidebar({ path }: { path: string }) {
   return (
     <>
       {/* Drawn only on a wide window, so that a narrow one does not load the lists until the drawer is opened. */}
-      {wide && <SidebarAside />}
+      {wide && <SidebarAside path={path} />}
       <SidebarDrawer path={path} />
     </>
   );
 }
 
-function SidebarAside() {
+function SidebarAside({ path }: { path: string }) {
   const ref = useRef<HTMLElement>(null);
   const { location } = useSidebar();
   const key = locationKey(location);
@@ -38,7 +38,7 @@ function SidebarAside() {
 
   return (
     <aside ref={ref} className="sidebar">
-      <SidebarTree />
+      <SidebarTree path={path} />
     </aside>
   );
 }
@@ -99,7 +99,7 @@ function SidebarDrawer({ path }: { path: string }) {
             </button>
           </div>
           <div className="sidebar-drawer-body">
-            <SidebarTree />
+            <SidebarTree path={path} />
           </div>
         </div>
       )}
@@ -107,7 +107,8 @@ function SidebarDrawer({ path }: { path: string }) {
   );
 }
 
-function SidebarTree() {
+// path is the path of the screen shown, with the search part if any.
+function SidebarTree({ path }: { path: string }) {
   const { spaces, reloadAll, invalidateSpaces } = useSidebar();
   let body: ReactNode;
   if (spaces.data === null) {
@@ -141,8 +142,22 @@ function SidebarTree() {
         </button>
       </div>
       {body}
+      {/* Archived spaces are not in the tree; they are listed on the archive screen only. Shown even when there
+          are none, so that the place to look is always the same. */}
+      <Link
+        to="/archive"
+        className="sidebar-archive-link"
+        aria-current={pathnameOf(path) === "/archive" ? "page" : undefined}
+      >
+        アーカイブ
+      </Link>
     </nav>
   );
+}
+
+function pathnameOf(path: string): string {
+  const index = path.indexOf("?");
+  return index === -1 ? path : path.slice(0, index);
 }
 
 function SpaceItem({ space }: { space: Space }) {

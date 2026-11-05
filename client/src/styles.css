@@ -1011,6 +1011,37 @@ a.sidebar-link:hover {
   }
 }
 
+/* The link to the archive screen below the tree: small and quiet, unlike the rows of the spaces. */
+.sidebar-archive-link {
+  display: inline-block;
+  margin: 1rem 0 0 0.5rem;
+  padding: 0.125rem 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+  text-decoration: none;
+  border-radius: 0.25rem;
+}
+
+.sidebar-archive-link:hover {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+.sidebar-archive-link[aria-current] {
+  font-weight: 700;
+  color: var(--link);
+}
+
+@media (pointer: coarse), (max-width: 639px) {
+  .sidebar-archive-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.5rem;
+    margin-top: 0.5rem;
+  }
+}
+
 /* ---------- Screens ---------- */
 
 .main {
@@ -1075,6 +1106,17 @@ a.sidebar-link:hover {
 
 .notice p {
   margin: 0 0 0.5rem;
+}
+
+/* Shown on the screens of an archived space, below the title. */
+.archived-notice {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .actions {
@@ -1462,6 +1504,15 @@ h2.spaces-heading {
 .space-card-note {
   font-size: 0.8125rem;
   color: var(--ink-3);
+}
+
+/* The kind and when the space was archived, on the archive screen. */
+.archive-space-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+  margin-top: 0.25rem;
 }
 
 .space-card .icon-chevron,

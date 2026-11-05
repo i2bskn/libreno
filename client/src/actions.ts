@@ -1,7 +1,7 @@
 import type { Attachment, CreateSpaceRequest, CreateUserRequest, Page, Space, User } from "../../src/api/types";
 // A value import from the server code: validation.ts imports nothing else, so no other server code is bundled.
 import { ATTACHMENT_MAX_BYTES, emptyFileMessage, fileTooLargeMessage } from "../../src/attachments/validation";
-import { LoginRequiredError, responseErrorMessage, unexpectedResponseMessage } from "./api";
+import { LoginRequiredError, responseError, responseErrorMessage, unexpectedResponseMessage } from "./api";
 import type { PageChanges } from "./edit";
 import type { ApiClient } from "./load";
 import { isValidId } from "./router";
@@ -13,6 +13,17 @@ type SendFailure =
   | { kind: "unknown" }
   // Login is required and the move to the login page has started.
   | { kind: "redirecting" };
+
+// Sorts a 409 of a write to a page: space_archived (the space was archived) is an error with the server's
+// message, any other code is a conflict (someone else changed the page first).
+async function conflictOrArchived(res: {
+  status: number;
+  json(): Promise<unknown>;
+}): Promise<{ kind: "conflict" } | { kind: "error"; message: string }> {
+  const { code, message } = await responseError(res);
+  if (code === "space_archived") return { kind: "error", message };
+  return { kind: "conflict" };
+}
 
 // Sends a request. A rejection becomes the failure to return; never rejects.
 async function send<R>(call: () => Promise<R>): Promise<{ kind: "response"; res: R } | SendFailure> {
@@ -52,7 +63,7 @@ export async function restoreRevision(
     return { kind: "unknown" };
   }
   if (res.ok) return { kind: "ok" };
-  if (res.status === 409) return { kind: "conflict" };
+  if (res.status === 409) return conflictOrArchived(res);
   return { kind: "error", message: await responseErrorMessage(res) };
 }
 
@@ -92,7 +103,7 @@ export async function restoreTrashedPage(client: ApiClient, pageId: string): Pro
     }
   }
   if (res.status === 404) return { kind: "notFound" };
-  if (res.status === 409) return { kind: "conflict" };
+  if (res.status === 409) return conflictOrArchived(res);
   return { kind: "error", message: await responseErrorMessage(res) };
 }
 
@@ -112,7 +123,7 @@ export async function purgeTrashedPage(client: ApiClient, pageId: string): Promi
   const { res } = sent;
   if (res.ok) return { kind: "ok" };
   if (res.status === 404) return { kind: "notFound" };
-  if (res.status === 409) return { kind: "conflict" };
+  if (res.status === 409) return conflictOrArchived(res);
   if (res.status === 403) return { kind: "forbidden", message: await responseErrorMessage(res) };
   return { kind: "error", message: await responseErrorMessage(res) };
 }
@@ -177,7 +188,7 @@ export async function updatePage(
     }
   }
   if (res.status === 404) return { kind: "notFound" };
-  if (res.status === 409) return { kind: "conflict" };
+  if (res.status === 409) return conflictOrArchived(res);
   return { kind: "error", message: await responseErrorMessage(res) };
 }
 
@@ -212,7 +223,7 @@ export async function movePage(
     }
   }
   if (res.status === 404) return { kind: "notFound" };
-  if (res.status === 409) return { kind: "conflict" };
+  if (res.status === 409) return conflictOrArchived(res);
   return { kind: "error", message: await responseErrorMessage(res) };
 }
 
@@ -324,6 +335,19 @@ export async function updateSpaceSortOrder(
 ): Promise<SpaceActionResult> {
   return resourceActionResult(
     await send(() => client.api.v1.spaces[":id"].$patch({ param: { id: spaceId }, json: { sort_order: sortOrder } })),
+  );
+}
+
+// Archives a space other than a personal space: its contents become read only and it is listed only on the
+// archive screen. Admins only. Never rejects.
+export async function archiveSpace(client: ApiClient, spaceId: string): Promise<SpaceActionResult> {
+  return resourceActionResult(await send(() => client.api.v1.spaces[":id"].archive.$post({ param: { id: spaceId } })));
+}
+
+// Unarchives a space. Admins only. Never rejects.
+export async function unarchiveSpace(client: ApiClient, spaceId: string): Promise<SpaceActionResult> {
+  return resourceActionResult(
+    await send(() => client.api.v1.spaces[":id"].unarchive.$post({ param: { id: spaceId } })),
   );
 }
 

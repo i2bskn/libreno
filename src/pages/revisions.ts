@@ -2,7 +2,7 @@ import { and, desc, eq, notInArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { pageRevisions, pages, type PageRevisionRow, type PageRow, type UserRow } from "../db/schema";
 import type { SpaceViewer } from "../spaces/access";
-import { findAccessiblePage } from "./queries";
+import { findAccessiblePage, findAccessiblePageIncludingTrash } from "./queries";
 import { updatePage } from "./service";
 
 // Shared by the REST API and the MCP tools. Reads check access to the page first, as in queries.ts.
@@ -101,11 +101,12 @@ export async function findAccessiblePageRevision(
 
 export type RestorePageRevisionResult =
   | { ok: true; page: PageRow }
-  | { ok: false; error: "not_found" | "revision_not_found" | "version_conflict" };
+  | { ok: false; error: "not_found" | "space_archived" | "revision_not_found" | "version_conflict" };
 
 // Restoring is an ordinary update with the title and body of the revision: the current content is kept
 // as a new revision and the version is incremented. The folder does not change.
 // The title and body are written without validation again; they were valid when saved.
+// The errors come in the order not_found, space_archived, revision_not_found, then those of the update.
 export async function restorePageRevision(
   db: Db,
   user: UserRow,
@@ -113,6 +114,10 @@ export async function restorePageRevision(
   revisionVersion: number | null,
   currentVersion: number,
 ): Promise<RestorePageRevisionResult> {
+  // Not in findAccessiblePageRevision, which the reads share: archived spaces can still be read.
+  const page = await findAccessiblePageIncludingTrash(db, user, pageId);
+  if (!page || page.page.deletedAt !== null) return { ok: false, error: "not_found" };
+  if (page.space.archivedAt !== null) return { ok: false, error: "space_archived" };
   const found = await findAccessiblePageRevision(db, user, pageId, revisionVersion);
   if (!found.ok) return found;
   // The revision may be deleted from here on; its values are already read.

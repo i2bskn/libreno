@@ -6,7 +6,7 @@ import { Link } from "../Link";
 import { type ApiClient, loadTrashView, useView } from "../load";
 import { isValidId } from "../router";
 import { useSidebarActions, useSidebarLocation, viewLocation } from "../sidebarStore";
-import { ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import { ArchivedNotice, BreadcrumbRoot, ViewStatus, isArchived, useDocumentTitle, viewTitle } from "./common";
 
 // The result of the last action, shown above the list until the next one.
 type Notice = { kind: "text"; text: string } | { kind: "restored"; id: string; title: string };
@@ -31,8 +31,10 @@ export function TrashView({ client, id, isAdmin }: { client: ApiClient; id: stri
   }
   const { space, pages } = state.data;
   const name = spaceDisplayName(space);
+  // The pages in the trash of an archived space can be neither restored nor deleted.
+  const archived = isArchived(space);
   // Pages of personal spaces are left to the scheduled deletion, even for admins.
-  const canPurge = isAdmin && space.kind !== "personal";
+  const canPurge = isAdmin && space.kind !== "personal" && !archived;
   const now = Date.now();
 
   async function onRestore(page: TrashedPage) {
@@ -103,15 +105,14 @@ export function TrashView({ client, id, isAdmin }: { client: ApiClient; id: stri
     <main className="main">
       <nav className="breadcrumbs" aria-label="パンくずリスト">
         <ol>
-          <li>
-            <Link to="/">スペース</Link>
-          </li>
+          <BreadcrumbRoot archived={archived} />
           <li>{isValidId(space.id) ? <Link to={`/spaces/${space.id}`}>{name}</Link> : name}</li>
           <li aria-current="page">ゴミ箱</li>
         </ol>
       </nav>
       <h1>ゴミ箱</h1>
       <p className="title-note">削除したページは&nbsp;30&nbsp;日たつと完全に削除されます。</p>
+      {archived && <ArchivedNotice />}
       {notice && (
         <p className="notice" role="status">
           {notice.kind === "text" ? (
@@ -138,6 +139,7 @@ export function TrashView({ client, id, isAdmin }: { client: ApiClient; id: stri
               key={page.id}
               page={page}
               now={now}
+              canRestore={!archived}
               canPurge={canPurge}
               sending={sending}
               onRestore={() => void onRestore(page)}
@@ -153,6 +155,7 @@ export function TrashView({ client, id, isAdmin }: { client: ApiClient; id: stri
 function TrashRow({
   page,
   now,
+  canRestore,
   canPurge,
   sending,
   onRestore,
@@ -160,6 +163,7 @@ function TrashRow({
 }: {
   page: TrashedPage;
   now: number;
+  canRestore: boolean;
   canPurge: boolean;
   sending: boolean;
   onRestore: () => void;
@@ -181,9 +185,11 @@ function TrashRow({
           <span>{formatPurgeRemaining(page.purge_after, now)}</span>
         </span>
         <span className="trash-actions">
-          <button type="button" onClick={onRestore} disabled={sending}>
-            元に戻す
-          </button>
+          {canRestore && (
+            <button type="button" onClick={onRestore} disabled={sending}>
+              元に戻す
+            </button>
+          )}
           {canPurge && !confirming && (
             <button
               type="button"

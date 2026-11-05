@@ -16,6 +16,7 @@ export type SearchPagesResult = { hits: SearchHitRow[]; hasMore: boolean };
 // 100-character query. lower() folds ASCII letters only (no ICU), so only those match case-insensitively.
 // Kept in one function so that it can be replaced by a full-text index later.
 // query must be normalized by normalizeSearchQuery; spaceId must be a space the viewer can access.
+// Without spaceId, archived spaces are left out; with it, the space is searched even if it is archived.
 export async function searchPages(
   db: Db,
   viewer: SpaceViewer,
@@ -28,7 +29,10 @@ export async function searchPages(
   // A subquery rather than bound IDs: D1 allows at most 100 bound parameters per statement.
   const access = inArray(
     pages.spaceId,
-    db.select({ id: spaces.id }).from(spaces).where(accessibleSpacesWhere(viewer)),
+    db
+      .select({ id: spaces.id })
+      .from(spaces)
+      .where(and(accessibleSpacesWhere(viewer), spaceId === undefined ? isNull(spaces.archivedAt) : undefined)),
   );
   // or() wraps the matches in parentheses; and() does not wrap its conditions, so a bare
   // "title match OR body match" would leak body matches from other spaces.

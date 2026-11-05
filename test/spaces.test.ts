@@ -118,6 +118,7 @@ describe("GET /api/v1/spaces", () => {
       kind: "personal",
       name: null,
       sort_order: 0,
+      archived_at: null,
       created_at: admin.createdAt,
       updated_at: admin.createdAt,
     });
@@ -166,6 +167,7 @@ describe("GET /api/v1/spaces/:id", () => {
       kind: "everyone",
       name: "Everyone",
       sort_order: 0,
+      archived_at: null,
       created_at: T0,
       updated_at: T0,
     });
@@ -197,6 +199,7 @@ describe("POST /api/v1/spaces", () => {
       kind: "admin",
       name: "Admins",
       sort_order: 0,
+      archived_at: null,
       created_at: T0,
       updated_at: T0,
     });
@@ -258,6 +261,7 @@ describe("PATCH /api/v1/spaces/:id", () => {
       kind: "everyone",
       name: "New",
       sort_order: 0,
+      archived_at: null,
       created_at: T0,
       updated_at: T0 + 1000,
     });
@@ -273,6 +277,7 @@ describe("PATCH /api/v1/spaces/:id", () => {
       kind: "everyone",
       name: "Ordered",
       sort_order: 3,
+      archived_at: null,
       created_at: T0,
       updated_at: T0 + 1000,
     });

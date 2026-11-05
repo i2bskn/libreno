@@ -11,15 +11,16 @@ import {
   type MoveOptions,
   type VisibilityNotAcknowledged,
 } from "../spaces/access";
+import { isSpaceArchived, spaceNotArchived } from "../spaces/archive";
 import { findSpaceById } from "../spaces/queries";
-import { findAccessiblePage, findAccessiblePageIncludingTrash, findPageById } from "./queries";
+import { findAccessiblePageIncludingTrash, findPageById } from "./queries";
 import { insertRevisionQuery, pruneRevisionsQuery } from "./revisions";
 
 // Shared by the REST API and the MCP tools. Input is validated by the callers (see validation.ts).
 
 export type CreatePageResult =
   | { ok: true; page: PageRow }
-  | { ok: false; error: "space_not_found" | "folder_not_found" };
+  | { ok: false; error: "space_not_found" | "space_archived" | "folder_not_found" };
 
 export async function createPage(
   db: Db,
@@ -30,14 +31,17 @@ export async function createPage(
   const space = await findSpaceById(db, spaceId);
   // Spaces the user cannot access are reported as missing so that their existence is not revealed.
   if (!space || !canAccessSpace(user, space)) return { ok: false, error: "space_not_found" };
+  // Checked after the access, so that whether a space the user cannot access is archived is not revealed.
+  if (space.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (input.folderId !== null && !(await folderExistsInSpace(db, input.folderId, space.id))) {
     return { ok: false, error: "folder_not_found" };
   }
 
   const now = clock.now();
-  // One conditional INSERT ... SELECT, so that a folder moved to another space (or a space deleted) after
-  // the checks above inserts nothing. drizzle checks that the keys are those of the table, in the same order.
-  const conditions: SQL[] = [eq(spaces.id, space.id)];
+  // One conditional INSERT ... SELECT, so that a folder moved to another space (or a space deleted or
+  // archived) after the checks above inserts nothing. drizzle checks that the keys are those of the table,
+  // in the same order.
+  const conditions: SQL[] = [eq(spaces.id, space.id), isNull(spaces.archivedAt)];
   if (input.folderId !== null) {
     conditions.push(
       sql`EXISTS (SELECT 1 FROM ${folders} f WHERE f.id = ${input.folderId} AND f.space_id = ${space.id})`,
@@ -73,20 +77,21 @@ export async function createPage(
     if (!isForeignKeyViolation(error)) throw error;
   }
   if (page) return { ok: true, page };
-  // The folder was moved or deleted, or the space was deleted, after the checks above.
+  // The folder was moved or deleted, or the space was deleted or archived, after the checks above.
   if (input.folderId !== null && !(await folderExistsInSpace(db, input.folderId, space.id))) {
     return { ok: false, error: "folder_not_found" };
   }
+  if (await isSpaceArchived(db, space.id)) return { ok: false, error: "space_archived" };
   return { ok: false, error: "space_not_found" };
 }
 
 export type UpdatePageResult =
   | { ok: true; page: PageRow }
-  | { ok: false; error: "not_found" | "version_conflict" | "folder_not_found" };
+  | { ok: false; error: "not_found" | "space_archived" | "version_conflict" | "folder_not_found" };
 
 // The condition of the UPDATE in updatePage and of the revision copied with it.
-// space_id keeps the write inside the space whose access was checked, and deleted_at keeps a page moved
-// to the trash after the check from being updated.
+// space_id keeps the write inside the space whose access was checked, deleted_at keeps a page moved
+// to the trash after the check from being updated, and the space must not be archived.
 export function pageUpdateWhere(
   page: Pick<PageRow, "id" | "spaceId">,
   version: number,
@@ -97,6 +102,7 @@ export function pageUpdateWhere(
     eq(pages.spaceId, page.spaceId),
     eq(pages.version, version),
     isNull(pages.deletedAt),
+    spaceNotArchived(page.spaceId),
   ];
   if (typeof folderId === "string") {
     conditions.push(sql`EXISTS (SELECT 1 FROM ${folders} f WHERE f.id = ${folderId} AND f.space_id = ${page.spaceId})`);
@@ -110,8 +116,10 @@ export async function updatePage(
   pageId: string,
   input: UpdatePageInput,
 ): Promise<UpdatePageResult> {
-  const page = await findAccessiblePage(db, user, pageId);
-  if (!page) return { ok: false, error: "not_found" };
+  const found = await findAccessiblePageIncludingTrash(db, user, pageId);
+  if (!found || found.page.deletedAt !== null) return { ok: false, error: "not_found" };
+  const { page } = found;
+  if (found.space.archivedAt !== null) return { ok: false, error: "space_archived" };
 
   // The version is incremented even if nothing changed. Moving to another folder is an update too.
   const folderId = input.folderId;
@@ -145,6 +153,7 @@ export async function updatePage(
   if (!current || current.spaceId !== page.spaceId || current.deletedAt !== null) {
     return { ok: false, error: "not_found" };
   }
+  if (await isSpaceArchived(db, page.spaceId)) return { ok: false, error: "space_archived" };
   if (current.version !== input.version) return { ok: false, error: "version_conflict" };
   if (typeof folderId === "string") return { ok: false, error: "folder_not_found" };
   return { ok: false, error: "version_conflict" };
@@ -152,11 +161,15 @@ export async function updatePage(
 
 export type MovePageResult =
   | { ok: true; page: PageRow }
-  | { ok: false; error: "not_found" | "space_not_found" | "folder_not_found" | "version_conflict" }
+  | {
+      ok: false;
+      error: "not_found" | "space_not_found" | "space_archived" | "folder_not_found" | "version_conflict";
+    }
   | VisibilityNotAcknowledged;
 
 // The condition of the UPDATE in movePage. Like pageUpdateWhere, space_id keeps the write inside the space
-// whose access was checked. The destination space and the folder in it must exist at the time of the write.
+// whose access was checked. The destination space and the folder in it must exist at the time of the write,
+// and neither the source nor the destination space may be archived.
 function pageMoveWhere(
   page: Pick<PageRow, "id" | "spaceId">,
   version: number,
@@ -168,7 +181,8 @@ function pageMoveWhere(
     eq(pages.spaceId, page.spaceId),
     eq(pages.version, version),
     isNull(pages.deletedAt),
-    sql`EXISTS (SELECT 1 FROM ${spaces} s WHERE s.id = ${destSpaceId})`,
+    spaceNotArchived(page.spaceId),
+    spaceNotArchived(destSpaceId),
   ];
   if (folderId !== null) {
     conditions.push(sql`EXISTS (SELECT 1 FROM ${folders} f WHERE f.id = ${folderId} AND f.space_id = ${destSpaceId})`);
@@ -189,9 +203,11 @@ export async function movePage(
   const found = await findAccessiblePageIncludingTrash(db, user, pageId);
   if (!found || found.page.deletedAt !== null) return { ok: false, error: "not_found" };
   const { page, space: source } = found;
+  if (source.archivedAt !== null) return { ok: false, error: "space_archived" };
   const dest = await findSpaceById(db, input.spaceId);
   // Spaces the user cannot access are reported as missing so that their existence is not revealed.
   if (!dest || !canAccessSpace(user, dest)) return { ok: false, error: "space_not_found" };
+  if (dest.archivedAt !== null) return { ok: false, error: "space_archived" };
   // Checked with the same source space as the condition of the write: if the page moves to another space
   // after this, the write changes nothing.
   const notAcknowledged = visibilityNotAcknowledged(source, dest, options);
@@ -224,7 +240,10 @@ export async function movePage(
   if (!current || current.spaceId !== page.spaceId || current.deletedAt !== null) {
     return { ok: false, error: "not_found" };
   }
-  if (!(await findSpaceById(db, dest.id))) return { ok: false, error: "space_not_found" };
+  if (await isSpaceArchived(db, page.spaceId)) return { ok: false, error: "space_archived" };
+  const currentDest = await findSpaceById(db, dest.id);
+  if (!currentDest) return { ok: false, error: "space_not_found" };
+  if (currentDest.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (current.version !== input.version) return { ok: false, error: "version_conflict" };
   if (input.folderId !== null) return { ok: false, error: "folder_not_found" };
   return { ok: false, error: "version_conflict" };

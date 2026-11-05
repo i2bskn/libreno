@@ -13,6 +13,7 @@ export type Route =
   | { name: "pageEdit"; id: string }
   | { name: "search"; query: string }
   | { name: "users" }
+  | { name: "archive" }
   | { name: "notFound" };
 
 // hc() puts params into the URL without encoding them, so IDs are limited to characters that cannot
@@ -70,6 +71,7 @@ export function matchRoute(path: string): Route {
   // URLSearchParams decodes the value and reads "+" as a space.
   if (pathname === "/search") return { name: "search", query: new URLSearchParams(search).get("q") ?? "" };
   if (pathname === "/users") return { name: "users" };
+  if (pathname === "/archive") return { name: "archive" };
   const subroute = matchPageSubroute(pathname);
   if (subroute) return subroute;
   const trash = TRASH_PATTERN.exec(pathname);

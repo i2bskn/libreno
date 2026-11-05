@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { and, isNotNull, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type {
   AttachmentList,
@@ -80,6 +81,7 @@ import {
   toApiTrashedPage,
 } from "../routes/api";
 import { accessibleSpacesWhere, canAccessSpace, type VisibilityNotAcknowledged } from "../spaces/access";
+import { spaceArchivedMessage } from "../spaces/archive";
 import { findSpaceById, spaceListOrder } from "../spaces/queries";
 
 export type ToolDeps = { db: Db; user: UserRow; attachments: R2Bucket };
@@ -134,15 +136,28 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         "with the personal space last. Each space has an id, a kind, a name and a sort_order. " +
         "kind is 'everyone' (all users), 'admin' (admins only) or 'personal'. " +
         "The personal space (kind=personal, name=null) belongs to the calling user and is private to them. " +
+        "archived_at is the time the space was archived, or null if it is not archived. " +
+        "Archived spaces are read only and are listed only with archived=true; their pages can still be read. " +
         "Use a space id with list_pages.",
+      inputSchema: {
+        archived: z
+          .boolean()
+          .optional()
+          .describe("Set to true to list only the archived spaces. Omit or false to list the others"),
+      },
       annotations: readOnlyAnnotations,
     },
-    () =>
+    ({ archived }) =>
       guard("list_spaces", async () => {
         const rows = await db
           .select()
           .from(spaces)
-          .where(accessibleSpacesWhere(user))
+          .where(
+            and(
+              accessibleSpacesWhere(user),
+              archived === true ? isNotNull(spaces.archivedAt) : isNull(spaces.archivedAt),
+            ),
+          )
           .orderBy(...spaceListOrder)
           .all();
         const body: SpaceList = { spaces: rows.map(toApiSpace) };
@@ -197,7 +212,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         "Matching is case-insensitive for ASCII letters only; there is no word splitting, so the whole query is matched as one string. " +
         "Pages whose title matches come first, then the most recently updated. Returns up to 50 pages without bodies, " +
         "each with a snippet of the body around the first match (null when only the title matches). " +
-        "has_more is true when more pages matched; narrow the query or pass space_id. Use get_page to read a body.",
+        "has_more is true when more pages matched; narrow the query or pass space_id. Use get_page to read a body. " +
+        "Without space_id, archived spaces are not searched; pass the space_id of an archived space to search it.",
       inputSchema: {
         // Not .min()/.max(): normalizeSearchQuery checks it, so that the message is the same as in the REST API.
         query: z.string().describe("The text to search for, 1 to 100 characters"),
@@ -254,6 +270,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
           folderId: folderId.value ?? null,
         });
         if (!result.ok) {
+          if (result.error === "space_archived") return errorResult(spaceArchivedMessage);
           return errorResult(result.error === "folder_not_found" ? folderNotFoundMessage : "スペースが見つかりません");
         }
         // No body: the caller has just sent it, and it can be up to 512KB.
@@ -329,6 +346,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         const result = await updatePage(db, user, page_id, input);
         if (result.ok) return jsonResult(toApiPageSummary(result.page));
         if (result.error === "not_found") return errorResult(pageNotFoundMessage);
+        if (result.error === "space_archived") return errorResult(spaceArchivedMessage);
         if (result.error === "folder_not_found") return errorResult(folderNotFoundMessage);
         return errorResult(
           `${versionConflictMessage}。get_page で最新の version と本文を取得し、変更を反映し直してから update_page を呼んでください`,
@@ -397,6 +415,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         switch (result.error) {
           case "not_found":
             return errorResult(pageNotFoundMessage);
+          case "space_archived":
+            return errorResult(spaceArchivedMessage);
           case "space_not_found":
             return errorResult(moveSpaceNotFoundMessage);
           case "folder_not_found":
@@ -424,6 +444,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
     ({ page_id }) =>
       guard("delete_page", async () => {
         const result = await trashPage(db, user, page_id);
+        if (!result.ok && result.error === "space_archived") return errorResult(spaceArchivedMessage);
         if (!result.ok) return errorResult(pageNotFoundMessage);
         return jsonResult({ id: page_id, trashed: true });
       }),
@@ -464,6 +485,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         const result = await restoreTrashedPage(db, user, page_id);
         if (result.ok) return jsonResult(toApiPageSummary(result.page));
         if (result.error === "not_found") return errorResult(pageNotFoundMessage);
+        if (result.error === "space_archived") return errorResult(spaceArchivedMessage);
         return errorResult(notInTrashOnRestoreMessage);
       }),
   );
@@ -547,6 +569,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         );
         if (result.ok) return jsonResult(toApiPageSummary(result.page));
         if (result.error === "not_found") return errorResult(pageNotFoundMessage);
+        if (result.error === "space_archived") return errorResult(spaceArchivedMessage);
         if (result.error === "revision_not_found") return errorResult(revisionNotFoundMessage);
         return errorResult(
           `${versionConflictMessage}。get_page で最新の version を取得してから restore_page_revision を呼んでください`,
@@ -597,7 +620,9 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
           contentType: checked.contentType,
           content: { kind: "bytes", bytes },
         });
-        if (!result.ok) return errorResult(pageNotFoundMessage);
+        if (!result.ok) {
+          return errorResult(result.error === "space_archived" ? spaceArchivedMessage : pageNotFoundMessage);
+        }
         return jsonResult(toApiAttachment(result.attachment));
       }),
   );
@@ -670,6 +695,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
           parentId: parentId.value ?? null,
         });
         if (result.ok) return jsonResult(toApiFolder(result.folder));
+        if (result.error === "space_archived") return errorResult(spaceArchivedMessage);
         if (result.error === "parent_not_found") return errorResult(parentNotFoundOnCreateMessage);
         return errorResult("スペースが見つかりません");
       }),
@@ -720,6 +746,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         switch (result.error) {
           case "not_found":
             return errorResult(folderNotFoundMessage);
+          case "space_archived":
+            return errorResult(spaceArchivedMessage);
           case "parent_not_found":
             return errorResult(parentNotFoundOnMoveMessage);
           case "folder_cycle":
@@ -779,6 +807,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         switch (result.error) {
           case "not_found":
             return errorResult(folderNotFoundMessage);
+          case "space_archived":
+            return errorResult(spaceArchivedMessage);
           case "space_not_found":
             return errorResult(moveSpaceNotFoundMessage);
           case "parent_not_found":
@@ -806,6 +836,7 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         const result = await deleteFolder(db, user, folder_id);
         if (result.ok) return jsonResult({ id: folder_id, deleted: true });
         if (result.error === "not_found") return errorResult(folderNotFoundMessage);
+        if (result.error === "space_archived") return errorResult(spaceArchivedMessage);
         return errorResult(folderNotEmptyMessage);
       }),
   );

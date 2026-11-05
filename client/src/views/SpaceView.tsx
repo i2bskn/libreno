@@ -5,7 +5,15 @@ import { type ApiClient, loadSpaceView, useView } from "../load";
 import { isValidId } from "../router";
 import { useSidebarLocation, viewLocation } from "../sidebarStore";
 import { TrashIcon } from "../icons";
-import { SpaceKindBadge, ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import {
+  ArchivedNotice,
+  BreadcrumbRoot,
+  SpaceKindBadge,
+  ViewStatus,
+  isArchived,
+  useDocumentTitle,
+  viewTitle,
+} from "./common";
 import { EntryList } from "./EntryList";
 import { FolderActions } from "./FolderActions";
 import { SpaceActions } from "./SpaceActions";
@@ -22,13 +30,12 @@ export function SpaceView({ client, id, isAdmin }: { client: ApiClient; id: stri
   }
   const { space, folders, pages } = state.data;
   const name = spaceDisplayName(space);
+  const archived = isArchived(space);
   return (
     <main className="main">
       <nav className="breadcrumbs" aria-label="パンくずリスト">
         <ol>
-          <li>
-            <Link to="/">スペース</Link>
-          </li>
+          <BreadcrumbRoot archived={archived} />
           <li aria-current="page">{name}</li>
         </ol>
       </nav>
@@ -49,7 +56,11 @@ export function SpaceView({ client, id, isAdmin }: { client: ApiClient; id: stri
           {SPACE_KIND_DESCRIPTIONS[space.kind]}
         </p>
       </div>
-      <FolderActions client={client} space={space} folders={folders} folder={null} onReload={reload} />
+      {archived ? (
+        <ArchivedNotice />
+      ) : (
+        <FolderActions client={client} space={space} folders={folders} folder={null} onReload={reload} />
+      )}
       {/* Only the top level; the rest is shown on the folder screens. */}
       <EntryList
         folders={childFolders(folders, null)}

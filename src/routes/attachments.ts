@@ -11,6 +11,7 @@ import {
   normalizeAttachmentFilename,
 } from "../attachments/validation";
 import type { AttachmentRow } from "../db/schema";
+import { spaceArchivedMessage } from "../spaces/archive";
 
 // The middleware of POST /api/v1/pages/:id/attachments (in pages.ts).
 
@@ -75,6 +76,7 @@ const attachmentsApi = new Hono<AppEnv>()
   // Deletes the attachment and its contents. This cannot be undone.
   .delete("/:id", requireUser, async (c) => {
     const result = await deleteAttachment(c.get("db"), c.env.ATTACHMENTS, c.get("user"), c.req.param("id"));
+    if (!result.ok && result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     if (!result.ok) return apiError(c, 404, "not_found", attachmentNotFoundMessage);
     return c.body(null, 204);
   });

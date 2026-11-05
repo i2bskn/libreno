@@ -63,6 +63,9 @@ export type Space = {
   name: string | null;
   // Display order: smaller comes first. Personal spaces always come last.
   sort_order: number;
+  // UNIX time in milliseconds while the space is archived, otherwise null. The contents of an archived space
+  // are read only, and it is listed only with GET /api/v1/spaces?archived=true.
+  archived_at: number | null;
   // UNIX time in milliseconds.
   created_at: number;
   // UNIX time in milliseconds.

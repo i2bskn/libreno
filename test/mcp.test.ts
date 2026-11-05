@@ -1801,3 +1801,55 @@ describe("origins and configuration", () => {
     );
   });
 });
+
+describe("archived spaces", () => {
+  const archivedMessage = "アーカイブされたスペースは編集できません。アーカイブを解除してから操作してください";
+
+  let token: string;
+  let archived: SpaceRow;
+  let active: SpaceRow;
+
+  beforeEach(async () => {
+    token = (await authorizeClient(memberCookies)).access_token;
+    archived = await insertSpace("everyone", "Archived");
+    active = await insertSpace("everyone", "Active");
+    await db.update(spaces).set({ archivedAt: Date.now() }).where(eq(spaces.id, archived.id));
+  });
+
+  it("lists archived spaces only with archived=true, as the REST API does", async () => {
+    const usual = toolJson<SpaceList>(await callTool(token, "list_spaces"));
+    expect(usual.spaces.map((s) => s.id)).not.toContain(archived.id);
+    expect(usual.spaces.map((s) => s.id)).toContain(active.id);
+    expect(toolJson<SpaceList>(await callTool(token, "list_spaces", { archived: false }))).toEqual(usual);
+
+    const onlyArchived = toolJson<SpaceList>(await callTool(token, "list_spaces", { archived: true }));
+    expect(onlyArchived.spaces.map((s) => s.id)).toEqual([archived.id]);
+    expect(onlyArchived.spaces[0]?.archived_at).not.toBeNull();
+    const rest = (await (await send("/api/v1/spaces?archived=true", { cookies: memberCookies })).json()) as SpaceList;
+    expect(onlyArchived).toEqual(rest);
+  });
+
+  it("rejects the write tools with the message of the REST API", async () => {
+    const page = await insertPage({ spaceId: archived.id, title: "Page" });
+    expectToolError(
+      await callTool(token, "create_page", { space_id: archived.id, title: "T", body: "" }),
+      archivedMessage,
+    );
+    expectToolError(
+      await callTool(token, "update_page", { page_id: page.id, version: 1, title: "X" }),
+      archivedMessage,
+    );
+    expectToolError(await callTool(token, "delete_page", { page_id: page.id }), archivedMessage);
+    expectToolError(await callTool(token, "create_folder", { space_id: archived.id, name: "F" }), archivedMessage);
+    expect((await db.query.pages.findFirst({ where: eq(pages.id, page.id) }))?.title).toBe("Page");
+  });
+
+  it("leaves archived spaces out of search_pages unless space_id is given", async () => {
+    const hidden = await insertPage({ spaceId: archived.id, title: "needle" });
+    const shown = await insertPage({ spaceId: active.id, title: "needle" });
+    const all = toolJson<SearchResult>(await callTool(token, "search_pages", { query: "needle" }));
+    expect(all.hits.map((hit) => hit.id)).toEqual([shown.id]);
+    const one = toolJson<SearchResult>(await callTool(token, "search_pages", { query: "needle", space_id: archived.id }));
+    expect(one.hits.map((hit) => hit.id)).toEqual([hidden.id]);
+  });
+});

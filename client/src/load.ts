@@ -98,7 +98,7 @@ export type HomeData = { spaces: Space[]; topPage: Page | null; topPageError: bo
 
 export async function loadHomeView(client: ApiClient): Promise<Loaded<HomeData>> {
   const [list, top] = await Promise.all([
-    request(() => client.api.v1.spaces.$get()),
+    request(() => client.api.v1.spaces.$get({ query: {} })),
     request(() => client.api.v1["top-page"].$get()),
   ]);
   if (list.kind === "redirecting") return list;
@@ -243,8 +243,9 @@ export async function loadPageHistoryView(client: ApiClient, id: string): Promis
   return { kind: "ready", data: { ...data, space: space.kind === "ok" ? space.value : null } };
 }
 
-// page is the current page; restoring needs its version.
-export type PageRevisionData = { page: Page; revision: PageRevision };
+// page is the current page; restoring needs its version. space is null when it could not be loaded; the
+// revision is shown anyway.
+export type PageRevisionData = { page: Page; space: Space | null; revision: PageRevision };
 
 export async function loadPageRevisionView(
   client: ApiClient,
@@ -256,10 +257,23 @@ export async function loadPageRevisionView(
     request(() => client.api.v1.pages[":id"].revisions[":version"].$get({ param: { id, version: String(version) } })),
     request(() => client.api.v1.pages[":id"].$get({ param: { id } })),
   ]);
-  if (revision.kind === "ok" && page.kind === "ok") {
-    return { kind: "ready", data: { page: page.value, revision: revision.value } };
-  }
-  return failure([revision, page]);
+  if (revision.kind !== "ok" || page.kind !== "ok") return failure([revision, page]);
+  // The space needs space_id from the page, so it is loaded after it.
+  const spaceId = page.value.space_id;
+  const data = { page: page.value, revision: revision.value };
+  if (!isValidId(spaceId)) return { kind: "ready", data: { ...data, space: null } };
+  const space = await request(() => client.api.v1.spaces[":id"].$get({ param: { id: spaceId } }));
+  if (space.kind === "redirecting") return space;
+  return { kind: "ready", data: { ...data, space: space.kind === "ok" ? space.value : null } };
+}
+
+// The archived spaces the user can access, for the archive screen.
+export async function loadArchiveView(client: ApiClient): Promise<Loaded<Space[]>> {
+  const list = await request(() => client.api.v1.spaces.$get({ query: { archived: "true" } }));
+  if (list.kind === "redirecting") return list;
+  // The list itself is never missing; a 404 here is an unexpected response.
+  if (list.kind === "notFound" || list.kind === "error") return { kind: "error", message: list.message };
+  return { kind: "ready", data: list.value.spaces };
 }
 
 // query is trimmed. spaceNames maps space_id to the display name; it is empty when the spaces
@@ -272,7 +286,7 @@ export async function loadSearchView(client: ApiClient, query: string): Promise<
   if (q === "") return { kind: "ready", data: { query: "", hits: [], hasMore: false, spaceNames: new Map() } };
   const [result, list] = await Promise.all([
     request(() => client.api.v1.search.$get({ query: { q } })),
-    request(() => client.api.v1.spaces.$get()),
+    request(() => client.api.v1.spaces.$get({ query: {} })),
   ]);
   if (result.kind === "redirecting") return result;
   // The search itself is never missing; a 404 here is an unexpected response.
@@ -301,7 +315,7 @@ export type ListResult<T> = { kind: "ok"; value: T } | { kind: "error" } | { kin
 
 // The spaces the user can access, to choose the destination of a move from. Never rejects.
 export async function loadSpaceList(client: ApiClient): Promise<ListResult<Space[]>> {
-  const list = await request(() => client.api.v1.spaces.$get());
+  const list = await request(() => client.api.v1.spaces.$get({ query: {} }));
   if (list.kind === "redirecting") return list;
   if (list.kind !== "ok") return { kind: "error" };
   return { kind: "ok", value: list.value.spaces };

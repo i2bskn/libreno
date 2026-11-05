@@ -3,8 +3,9 @@ import { clock } from "../clock";
 import type { Db } from "../db/client";
 import { pages, type PageRow, type UserRow } from "../db/schema";
 import { canAccessSpace, type SpaceViewer } from "../spaces/access";
+import { isSpaceArchived, spaceNotArchived } from "../spaces/archive";
 import { findSpaceById } from "../spaces/queries";
-import { findAccessiblePage, findAccessiblePageIncludingTrash, findPageById } from "./queries";
+import { findAccessiblePageIncludingTrash, findPageById } from "./queries";
 
 // Shared by the REST API and the MCP tools. Deleting a page moves it to the trash of its space, where it
 // stays for TRASH_RETENTION_DAYS before the scheduled job (purgeExpiredTrash) deletes it.
@@ -16,20 +17,35 @@ export const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 // A page in the trash without its body. deletedAt is set (see toApiTrashedPage).
 export type TrashedPageRow = Omit<PageRow, "body">;
 
-export type TrashPageResult = { ok: true } | { ok: false; error: "not_found" };
+export type TrashPageResult = { ok: true } | { ok: false; error: "not_found" | "space_archived" };
 
 // Moves the page to the trash. The version, updated_at and updated_by do not change, and no revision is kept.
 export async function trashPage(db: Db, user: UserRow, pageId: string): Promise<TrashPageResult> {
-  const page = await findAccessiblePage(db, user, pageId);
-  if (!page) return { ok: false, error: "not_found" };
+  const found = await findAccessiblePageIncludingTrash(db, user, pageId);
+  if (!found || found.page.deletedAt !== null) return { ok: false, error: "not_found" };
+  const { page } = found;
+  if (found.space.archivedAt !== null) return { ok: false, error: "space_archived" };
   // space_id keeps the write inside the space whose access was just checked.
   const result = await db
     .update(pages)
     .set({ deletedAt: clock.now(), deletedBy: user.id })
-    .where(and(eq(pages.id, page.id), eq(pages.spaceId, page.spaceId), isNull(pages.deletedAt)))
+    .where(
+      and(
+        eq(pages.id, page.id),
+        eq(pages.spaceId, page.spaceId),
+        isNull(pages.deletedAt),
+        spaceNotArchived(page.spaceId),
+      ),
+    )
     .run();
-  if (result.meta.changes === 0) return { ok: false, error: "not_found" };
-  return { ok: true };
+  if (result.meta.changes === 1) return { ok: true };
+  // Access is not checked again: the page was visible just before.
+  const current = await findPageById(db, page.id);
+  if (!current || current.spaceId !== page.spaceId || current.deletedAt !== null) {
+    return { ok: false, error: "not_found" };
+  }
+  if (await isSpaceArchived(db, page.spaceId)) return { ok: false, error: "space_archived" };
+  return { ok: false, error: "not_found" };
 }
 
 export type ListTrashResult = { ok: true; pages: TrashedPageRow[] } | { ok: false; error: "space_not_found" };
@@ -65,17 +81,17 @@ export async function listTrash(db: Db, viewer: SpaceViewer, spaceId: string): P
 async function trashWriteFailure(
   db: Db,
   page: Pick<PageRow, "id" | "spaceId">,
-): Promise<{ ok: false; error: "not_found" | "not_in_trash" }> {
+): Promise<{ ok: false; error: "not_found" | "space_archived" | "not_in_trash" }> {
   const current = await findPageById(db, page.id);
-  if (current && current.spaceId === page.spaceId && current.deletedAt === null) {
-    return { ok: false, error: "not_in_trash" };
-  }
+  if (!current || current.spaceId !== page.spaceId) return { ok: false, error: "not_found" };
+  if (await isSpaceArchived(db, page.spaceId)) return { ok: false, error: "space_archived" };
+  if (current.deletedAt === null) return { ok: false, error: "not_in_trash" };
   return { ok: false, error: "not_found" };
 }
 
 export type RestoreTrashedPageResult =
   | { ok: true; page: PageRow }
-  | { ok: false; error: "not_found" | "not_in_trash" };
+  | { ok: false; error: "not_found" | "space_archived" | "not_in_trash" };
 
 // Moves the page out of the trash. The version and updated_at do not change. The folder stays as it is;
 // it is already the top level if the folder was deleted while the page was in the trash.
@@ -87,11 +103,19 @@ export async function restoreTrashedPage(
   const found = await findAccessiblePageIncludingTrash(db, viewer, pageId);
   if (!found) return { ok: false, error: "not_found" };
   const { page } = found;
+  if (found.space.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (page.deletedAt === null) return { ok: false, error: "not_in_trash" };
   const restored = await db
     .update(pages)
     .set({ deletedAt: null, deletedBy: null })
-    .where(and(eq(pages.id, page.id), eq(pages.spaceId, page.spaceId), isNotNull(pages.deletedAt)))
+    .where(
+      and(
+        eq(pages.id, page.id),
+        eq(pages.spaceId, page.spaceId),
+        isNotNull(pages.deletedAt),
+        spaceNotArchived(page.spaceId),
+      ),
+    )
     .returning()
     .get();
   if (restored) return { ok: true, page: restored };
@@ -100,7 +124,10 @@ export async function restoreTrashedPage(
 
 export type PurgeTrashedPageResult =
   | { ok: true }
-  | { ok: false; error: "not_found" | "not_in_trash" | "forbidden_role" | "forbidden_personal" };
+  | {
+      ok: false;
+      error: "not_found" | "space_archived" | "not_in_trash" | "forbidden_role" | "forbidden_personal";
+    };
 
 // Deletes a page in the trash with its revisions (ON DELETE CASCADE). Admins only, and not for pages of
 // personal spaces, which are left to the scheduled job: admins cannot see the personal spaces of others.
@@ -112,11 +139,19 @@ export async function purgeTrashedPage(db: Db, user: UserRow, pageId: string): P
   const { page, space } = found;
   // Only the owner can see a personal space here, so there is nothing to hide: forbidden rather than not_found.
   if (space.kind === "personal") return { ok: false, error: "forbidden_personal" };
+  if (space.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (page.deletedAt === null) return { ok: false, error: "not_in_trash" };
   // RETURNING rather than meta.changes, which in D1 also counts the revisions deleted in cascade.
   const deleted = await db
     .delete(pages)
-    .where(and(eq(pages.id, page.id), eq(pages.spaceId, page.spaceId), isNotNull(pages.deletedAt)))
+    .where(
+      and(
+        eq(pages.id, page.id),
+        eq(pages.spaceId, page.spaceId),
+        isNotNull(pages.deletedAt),
+        spaceNotArchived(page.spaceId),
+      ),
+    )
     .returning({ id: pages.id })
     .get();
   if (deleted) return { ok: true };

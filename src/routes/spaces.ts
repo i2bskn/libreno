@@ -1,5 +1,5 @@
-import { Hono } from "hono";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { Hono, type MiddlewareHandler } from "hono";
+import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type {
   CreateSpaceInput,
   CreateSpaceRequest,
@@ -22,6 +22,7 @@ import { listPageSummaries } from "../pages/queries";
 import { createPage } from "../pages/service";
 import { listTrash } from "../pages/trash";
 import { accessibleSpacesWhere, canAccessSpace } from "../spaces/access";
+import { setSpaceArchived, spaceArchivedMessage } from "../spaces/archive";
 import { findSpaceById, spaceListOrder } from "../spaces/queries";
 import { jsonBody, toApiFolder, toApiPage, toApiPageSummary, toApiSpace, toApiTrashedPage } from "./api";
 import { createFolderBody } from "./folders";
@@ -34,7 +35,8 @@ const CONTROL_CHARACTER = /\p{Cc}/u;
 
 const spaceNotFound = "スペースが見つかりません";
 const invalidName = "スペースの名前は 1 文字以上 100 文字以下で、改行を含まない文字列にしてください";
-const nameTaken = "この名前のスペースはすでにあります";
+const nameTaken = "この名前のスペースはすでにあります（アーカイブされたスペースを含みます）";
+const archivePersonalForbidden = "個人スペースはアーカイブできません";
 const emptySpaceUpdate = "変更する項目（name か sort_order）を指定してください";
 const invalidSortOrder = "表示順は -1000000 以上 1000000 以下の整数にしてください";
 
@@ -87,13 +89,30 @@ const updateSpaceBody = jsonBody<UpdateSpaceRequest, UpdateSpaceInput>((body, c)
   return { ok: true, value };
 });
 
+// ?archived=true lists the archived spaces only; any other value (or none) lists the others.
+// Not validator("query"), which turns repeated keys into arrays; c.req.query() takes the first value.
+const spaceListQuery: MiddlewareHandler<
+  AppEnv,
+  string,
+  { in: { query: { archived?: string } }; out: { query: { archived: boolean } } }
+> = async (c, next) => {
+  c.req.addValidatedData("query", { archived: c.req.query("archived") === "true" });
+  return next();
+};
+
 const spacesApi = new Hono<AppEnv>()
-  .get("/", requireUser, async (c) => {
+  .get("/", requireUser, spaceListQuery, async (c) => {
+    const { archived } = c.req.valid("query");
     const rows = await c
       .get("db")
       .select()
       .from(spaces)
-      .where(accessibleSpacesWhere(c.get("user")))
+      .where(
+        and(
+          accessibleSpacesWhere(c.get("user")),
+          archived ? isNotNull(spaces.archivedAt) : isNull(spaces.archivedAt),
+        ),
+      )
       .orderBy(...spaceListOrder)
       .all();
     const body: SpaceList = { spaces: rows.map(toApiSpace) };
@@ -104,6 +123,18 @@ const spacesApi = new Hono<AppEnv>()
     // Spaces the user cannot access are reported as missing so that their existence is not revealed.
     if (!space || !canAccessSpace(c.get("user"), space)) return apiError(c, 404, "not_found", spaceNotFound);
     return c.json(toApiSpace(space), 200);
+  })
+  .post("/:id/archive", requireUser, requireAdmin, async (c) => {
+    const result = await setSpaceArchived(c.get("db"), c.get("user"), c.req.param("id"), true);
+    if (result.ok) return c.json(toApiSpace(result.space), 200);
+    if (result.error === "forbidden_personal") return apiError(c, 403, "forbidden", archivePersonalForbidden);
+    return apiError(c, 404, "not_found", spaceNotFound);
+  })
+  .post("/:id/unarchive", requireUser, requireAdmin, async (c) => {
+    const result = await setSpaceArchived(c.get("db"), c.get("user"), c.req.param("id"), false);
+    if (result.ok) return c.json(toApiSpace(result.space), 200);
+    if (result.error === "forbidden_personal") return apiError(c, 403, "forbidden", archivePersonalForbidden);
+    return apiError(c, 404, "not_found", spaceNotFound);
   })
   .post("/", requireUser, requireAdmin, createSpaceBody, async (c) => {
     const input = c.req.valid("json");
@@ -192,6 +223,7 @@ const spacesApi = new Hono<AppEnv>()
   .post("/:id/pages", requireUser, createPageBody, async (c) => {
     const result = await createPage(c.get("db"), c.get("user"), c.req.param("id"), c.req.valid("json"));
     if (result.ok) return c.json(toApiPage(result.page), 201);
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     // 400 rather than 404: the space in the path exists, but the folder in the body does not.
     if (result.error === "folder_not_found") return apiError(c, 400, "folder_not_found", folderNotFoundMessage);
     return apiError(c, 404, "not_found", spaceNotFound);
@@ -213,6 +245,7 @@ const spacesApi = new Hono<AppEnv>()
   .post("/:id/folders", requireUser, createFolderBody, async (c) => {
     const result = await createFolder(c.get("db"), c.get("user"), c.req.param("id"), c.req.valid("json"));
     if (result.ok) return c.json(toApiFolder(result.folder), 201);
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     // 400 rather than 404: the space in the path exists, but the parent in the body does not.
     if (result.error === "parent_not_found") {
       return apiError(c, 400, "parent_not_found", parentNotFoundOnCreateMessage);

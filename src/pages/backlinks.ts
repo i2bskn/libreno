@@ -1,4 +1,4 @@
-import { and, asc, desc, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { pages, spaces } from "../db/schema";
 import { accessibleSpacesWhere, type SpaceViewer } from "../spaces/access";
@@ -13,7 +13,7 @@ export const BACKLINK_LIMIT = 50;
 // "/api/v1/pages/{id}"; a body that mentions only the ID without "/pages/" is not a link; matching is
 // case-sensitive. Page IDs are lower-case UUIDs of fixed length, so one ID is never a prefix of another.
 // A target that is missing, in the trash or not accessible is reported as missing so that its existence
-// is not revealed.
+// is not revealed. Pages of archived spaces are left out, except those in the space of the target.
 export async function listBacklinks(
   db: Db,
   viewer: SpaceViewer,
@@ -24,7 +24,10 @@ export async function listBacklinks(
   // A subquery rather than bound IDs: D1 allows at most 100 bound parameters per statement.
   const access = inArray(
     pages.spaceId,
-    db.select({ id: spaces.id }).from(spaces).where(accessibleSpacesWhere(viewer)),
+    db
+      .select({ id: spaces.id })
+      .from(spaces)
+      .where(and(accessibleSpacesWhere(viewer), or(isNull(spaces.archivedAt), eq(spaces.id, target.spaceId)))),
   );
   // instr() rather than LIKE: "_" in a pattern is a wildcard, and D1 limits LIKE patterns to 50 bytes.
   const linksToTarget = sql`instr(${pages.body}, ${`/pages/${target.id}`}) > 0`;

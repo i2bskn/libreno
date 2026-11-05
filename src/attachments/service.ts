@@ -4,8 +4,10 @@ import { clock } from "../clock";
 import type { Db } from "../db/client";
 import { isForeignKeyViolation } from "../db/errors";
 import { attachments, pages, type AttachmentRow, type PageRow, type UserRow } from "../db/schema";
-import { findAccessiblePage } from "../pages/queries";
+import { findAccessiblePage, findAccessiblePageIncludingTrash, findPageById } from "../pages/queries";
 import type { SpaceViewer } from "../spaces/access";
+import { isSpaceArchived, spaceNotArchived } from "../spaces/archive";
+import { findSpaceById } from "../spaces/queries";
 import type { AttachmentContentType } from "./validation";
 
 // Shared by the REST API and the MCP tools. Input is validated by the callers (see validation.ts).
@@ -43,9 +45,12 @@ export type CreateAttachmentInput = {
   content: AttachmentContent;
 };
 
-export type CreateAttachmentResult = { ok: true; attachment: AttachmentRow } | { ok: false; error: "not_found" };
+export type CreateAttachmentResult =
+  | { ok: true; attachment: AttachmentRow }
+  | { ok: false; error: "not_found" | "space_archived" };
 
-// Checks the page and puts the contents in R2 under a new ID. Returns null if the page is not accessible.
+// Checks the page and its space, then puts the contents in R2 under a new ID. Returns the error, without
+// writing to R2, if the page is not accessible or its space is archived.
 // A stream belongs to this function from the call: it is canceled unless it has been handed to R2.
 async function putContent(
   db: Db,
@@ -53,17 +58,21 @@ async function putContent(
   user: UserRow,
   pageId: string,
   input: CreateAttachmentInput,
-): Promise<{ page: PageRow; id: string; size: number } | null> {
+): Promise<
+  { ok: true; page: PageRow; id: string; size: number } | { ok: false; error: "not_found" | "space_archived" }
+> {
   const { content } = input;
   let handedOver = false;
   try {
-    const page = await findAccessiblePage(db, user, pageId);
-    if (!page) return null;
+    const found = await findAccessiblePageIncludingTrash(db, user, pageId);
+    if (!found || found.page.deletedAt !== null) return { ok: false, error: "not_found" };
+    const { page } = found;
+    if (found.space.archivedAt !== null) return { ok: false, error: "space_archived" };
     const id = crypto.randomUUID();
     handedOver = true;
     const value = content.kind === "bytes" ? content.bytes : content.stream;
     const object = await bucket.put(attachmentKey(id), value, { httpMetadata: { contentType: input.contentType } });
-    return { page, id, size: content.kind === "bytes" ? content.bytes.byteLength : object.size };
+    return { ok: true, page, id, size: content.kind === "bytes" ? content.bytes.byteLength : object.size };
   } finally {
     // cancel() rejects on a stream that has errored, which must not replace the result or the error.
     if (!handedOver && content.kind === "stream") await content.stream.cancel().catch(() => {});
@@ -81,11 +90,12 @@ export async function createAttachment(
   input: CreateAttachmentInput,
 ): Promise<CreateAttachmentResult> {
   const put = await putContent(db, bucket, user, pageId, input);
-  if (!put) return { ok: false, error: "not_found" };
+  if (!put.ok) return put;
   const { page, id, size } = put;
 
-  // One conditional INSERT ... SELECT, so that a page moved to the trash or to another space after the
-  // check above gets nothing. drizzle checks that the keys are those of the table, in the same order.
+  // One conditional INSERT ... SELECT, so that a page moved to the trash or to another space, or a space
+  // archived, after the check above gets nothing. drizzle checks that the keys are those of the table, in
+  // the same order.
   let attachment: AttachmentRow | undefined;
   try {
     attachment = await db
@@ -102,7 +112,14 @@ export async function createAttachment(
             createdAt: sql<number>`${clock.now()}`.as("created_at"),
           })
           .from(pages)
-          .where(and(eq(pages.id, page.id), eq(pages.spaceId, page.spaceId), isNull(pages.deletedAt))),
+          .where(
+            and(
+              eq(pages.id, page.id),
+              eq(pages.spaceId, page.spaceId),
+              isNull(pages.deletedAt),
+              spaceNotArchived(page.spaceId),
+            ),
+          ),
       )
       .returning()
       .get();
@@ -118,6 +135,20 @@ export async function createAttachment(
     return { ok: true, attachment };
   }
   await deleteObject(bucket, id);
+  return attachmentWriteFailure(db, page);
+}
+
+// Reports why a conditional write on an attachment of the page changed no rows. Access is not checked
+// again: the page was visible just before.
+async function attachmentWriteFailure(
+  db: Db,
+  page: Pick<PageRow, "id" | "spaceId">,
+): Promise<{ ok: false; error: "not_found" | "space_archived" }> {
+  const current = await findPageById(db, page.id);
+  if (!current || current.spaceId !== page.spaceId || current.deletedAt !== null) {
+    return { ok: false, error: "not_found" };
+  }
+  if (await isSpaceArchived(db, page.spaceId)) return { ok: false, error: "space_archived" };
   return { ok: false, error: "not_found" };
 }
 
@@ -150,7 +181,7 @@ export async function findAccessibleAttachment(
   return { attachment, page };
 }
 
-export type DeleteAttachmentResult = { ok: true } | { ok: false; error: "not_found" };
+export type DeleteAttachmentResult = { ok: true } | { ok: false; error: "not_found" | "space_archived" };
 
 // Deletes the attachment and its object. Everyone who can edit the page can. There is no trash: this
 // cannot be undone. Pages that refer to it in their bodies keep the reference, which no longer shows.
@@ -163,7 +194,12 @@ export async function deleteAttachment(
   const found = await findAccessibleAttachment(db, viewer, id);
   if (!found) return { ok: false, error: "not_found" };
   const { attachment, page } = found;
-  // The page must still be out of the trash and in the space whose access was just checked.
+  // Not in findAccessibleAttachment, which the reads share: archived spaces can still be read.
+  const space = await findSpaceById(db, page.spaceId);
+  if (!space) return { ok: false, error: "not_found" };
+  if (space.archivedAt !== null) return { ok: false, error: "space_archived" };
+  // The page must still be out of the trash and in the space whose access was just checked, and the space
+  // must not be archived.
   const deleted = await db
     .delete(attachments)
     .where(
@@ -174,13 +210,21 @@ export async function deleteAttachment(
           db
             .select({ id: pages.id })
             .from(pages)
-            .where(and(eq(pages.id, page.id), eq(pages.spaceId, page.spaceId), isNull(pages.deletedAt))),
+            .where(
+              and(
+                eq(pages.id, page.id),
+                eq(pages.spaceId, page.spaceId),
+                isNull(pages.deletedAt),
+                spaceNotArchived(page.spaceId),
+              ),
+            ),
         ),
       ),
     )
     .returning({ id: attachments.id })
     .get();
-  if (!deleted) return { ok: false, error: "not_found" };
+  // Also not_found when the attachment itself was deleted after the check above.
+  if (!deleted) return attachmentWriteFailure(db, page);
   await deleteObject(bucket, attachment.id);
   return { ok: true };
 }

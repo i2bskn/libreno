@@ -83,11 +83,22 @@ export function unexpectedResponseMessage(status: number): string {
 
 // The message to show for a response that is not ok.
 export async function responseErrorMessage(res: { status: number; json(): Promise<unknown> }): Promise<string> {
+  return (await responseError(res)).message;
+}
+
+// The error code (null when the body is not an API error) and the message to show for a response that is not
+// ok, from one read of the body, which can be read only once.
+export async function responseError(res: {
+  status: number;
+  json(): Promise<unknown>;
+}): Promise<{ code: string | null; message: string }> {
   try {
     const body: unknown = await res.json();
-    if (isApiError(body)) return body.error.message;
+    if (isApiError(body)) {
+      return { code: typeof body.error.code === "string" ? body.error.code : null, message: body.error.message };
+    }
   } catch {
     // Not JSON.
   }
-  return unexpectedResponseMessage(res.status);
+  return { code: null, message: unexpectedResponseMessage(res.status) };
 }

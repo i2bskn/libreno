@@ -25,6 +25,7 @@ import {
   normalizeMoveSpaceId,
   parentNotFoundOnMoveMessage,
 } from "../folders/validation";
+import { spaceArchivedMessage } from "../spaces/archive";
 import { jsonBody, toApiFolder } from "./api";
 
 function invalidName(c: Context<AppEnv>): Response {
@@ -83,6 +84,8 @@ const foldersApi = new Hono<AppEnv>()
     switch (result.error) {
       case "not_found":
         return apiError(c, 404, "not_found", folderNotFoundMessage);
+      case "space_archived":
+        return apiError(c, 409, "space_archived", spaceArchivedMessage);
       // 400 rather than 404: the folder in the path exists, but the parent in the body does not.
       case "parent_not_found":
         return apiError(c, 400, "parent_not_found", parentNotFoundOnMoveMessage);
@@ -101,6 +104,8 @@ const foldersApi = new Hono<AppEnv>()
     switch (result.error) {
       case "not_found":
         return apiError(c, 404, "not_found", folderNotFoundMessage);
+      case "space_archived":
+        return apiError(c, 409, "space_archived", spaceArchivedMessage);
       // 400 rather than 404: the folder in the path exists, but the space or parent in the body does not.
       case "space_not_found":
         return apiError(c, 400, "space_not_found", moveSpaceNotFoundMessage);
@@ -116,6 +121,7 @@ const foldersApi = new Hono<AppEnv>()
     const result = await deleteFolder(c.get("db"), c.get("user"), c.req.param("id"));
     if (result.ok) return c.body(null, 204);
     if (result.error === "not_found") return apiError(c, 404, "not_found", folderNotFoundMessage);
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     return apiError(c, 409, "folder_not_empty", folderNotEmptyMessage);
   });
 

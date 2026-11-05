@@ -1,5 +1,5 @@
 import { type MouseEvent, type ReactNode, useEffect, useRef } from "react";
-import type { SpaceKind } from "../../../src/api/types";
+import type { Space, SpaceKind } from "../../../src/api/types";
 import { SPACE_KIND_LABELS } from "../format";
 import { SpaceKindIcon } from "../icons";
 import { Link } from "../Link";
@@ -39,6 +39,27 @@ export function SpaceKindBadge({ kind }: { kind: SpaceKind }) {
       {SPACE_KIND_LABELS[kind]}
     </span>
   );
+}
+
+// Whether the space is archived: its contents are read only. false when the space is not known (null), so that
+// the operations are shown and the server decides.
+export function isArchived(space: Pick<Space, "archived_at"> | null): boolean {
+  return space !== null && space.archived_at !== null;
+}
+
+// Shown below the title row of the screens of an archived space, which hide the operations that write.
+export function ArchivedNotice() {
+  return (
+    <p role="note" className="archived-notice">
+      このスペースはアーカイブされています。閲覧だけできます。
+    </p>
+  );
+}
+
+// The first item of the breadcrumbs: the archive screen for the screens of an archived space, where the space is
+// listed, and the spaces otherwise.
+export function BreadcrumbRoot({ archived }: { archived: boolean }) {
+  return <li>{archived ? <Link to="/archive">アーカイブ</Link> : <Link to="/">スペース</Link>}</li>;
 }
 
 // A small menu that opens below its summary. It closes after a link or button in it is chosen, on a click

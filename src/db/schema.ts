@@ -64,6 +64,8 @@ export const spaces = sqliteTable(
     ownerUserId: text("owner_user_id").references(() => users.id),
     // Display order: smaller comes first. Not used for personal spaces, which always come last.
     sortOrder: integer("sort_order").notNull().default(0),
+    // Set while the space is archived. Its contents are read only and it is left out of the usual lists.
+    archivedAt: integer("archived_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

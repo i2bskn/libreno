@@ -9,6 +9,7 @@ import { type Route, matchRoute, navigate, usePath } from "./router";
 import { SidebarProvider, useSidebarActions, useSidebarLocation } from "./sidebarStore";
 import { markLeaving } from "./unload";
 import { LoadError, Menu, NotFound, useDocumentTitle } from "./views/common";
+import { ArchiveView } from "./views/ArchiveView";
 import { ErrorBoundary } from "./views/ErrorBoundary";
 import { FolderView } from "./views/FolderView";
 import { HomeView } from "./views/HomeView";
@@ -104,6 +105,8 @@ function Screen({ route, user }: { route: Route; user: User }) {
       return <SearchView client={client} query={route.query} />;
     case "users":
       return <UsersView client={client} currentUserId={user.id} />;
+    case "archive":
+      return <ArchiveView client={client} />;
     case "notFound":
       return <RouteNotFound />;
   }

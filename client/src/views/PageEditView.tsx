@@ -16,7 +16,7 @@ import { type ApiClient, type PageData, loadPageEditView, useView } from "../loa
 import { isValidId, navigate } from "../router";
 import { useSidebarActions, useSidebarLocation, viewLocation } from "../sidebarStore";
 import { AttachmentsPanel } from "./Attachments";
-import { ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import { ArchivedNotice, ViewStatus, isArchived, useDocumentTitle, viewTitle } from "./common";
 import {
   DraftNotice,
   EMPTY_TITLE_MESSAGE,
@@ -52,6 +52,18 @@ export function PageEditView({
 
   if (state.kind !== "ready") {
     return <ViewStatus state={state} notFoundMessage="ページが見つかりません" onReload={reload} />;
+  }
+  // A page of an archived space cannot be edited: the form is not shown, so that nothing is typed in vain.
+  if (isArchived(state.data.space)) {
+    return (
+      <main className="main">
+        <h1>ページを編集</h1>
+        <ArchivedNotice />
+        <p>
+          <Link to={`/pages/${id}`}>ページへ戻る</Link>
+        </p>
+      </main>
+    );
   }
   // Reloading shows the loading state first, so the form starts again from the latest page.
   return <PageEditForm client={client} id={id} data={state.data} userId={userId} origin={origin} onReload={reload} />;

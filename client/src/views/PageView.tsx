@@ -10,7 +10,16 @@ import { type ApiClient, type ListResult, loadBacklinks, loadPageView, loadTopPa
 import { Markdown } from "../Markdown";
 import { isValidId, navigate } from "../router";
 import { useSidebarActions, useSidebarLocation, viewLocation } from "../sidebarStore";
-import { Menu, SpaceKindBadge, ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import {
+  ArchivedNotice,
+  BreadcrumbRoot,
+  Menu,
+  SpaceKindBadge,
+  ViewStatus,
+  isArchived,
+  useDocumentTitle,
+  viewTitle,
+} from "./common";
 import { MoveFolderSelect, MoveSpaceSelect, useMoveDestination } from "./MoveDestination";
 import { folderIdToValue, valueToFolderId } from "./PageEditor";
 
@@ -53,13 +62,14 @@ export function PageView({
   // The page is shown even if its space or folders could not be loaded.
   const spaceName = space ? spaceDisplayName(space) : "スペース";
   const path = folders && page.folder_id !== null ? folderPath(folders, page.folder_id) : [];
+  // The page of an archived space is read only: editing, moving, deleting and showing it at the top are hidden.
+  // Every item of the "…" menu writes, so the menu is hidden too.
+  const archived = isArchived(space);
   return (
     <main className="main">
       <nav className="breadcrumbs" aria-label="パンくずリスト">
         <ol>
-          <li>
-            <Link to="/">スペース</Link>
-          </li>
+          <BreadcrumbRoot archived={archived} />
           <li>{isValidId(page.space_id) ? <Link to={`/spaces/${page.space_id}`}>{spaceName}</Link> : spaceName}</li>
           {path.map((folder) => (
             <li key={folder.id}>
@@ -80,10 +90,12 @@ export function PageView({
         <div className="page-toolbar">
           {isValidId(page.id) && (
             <>
-              <Link to={`/pages/${page.id}/edit`} className="button button-primary">
-                <EditIcon />
-                編集
-              </Link>
+              {!archived && (
+                <Link to={`/pages/${page.id}/edit`} className="button button-primary">
+                  <EditIcon />
+                  編集
+                </Link>
+              )}
               <Link to={`/pages/${page.id}/history`} className="button">
                 <HistoryIcon />
                 履歴
@@ -94,23 +106,25 @@ export function PageView({
               </button>
             </>
           )}
-          <PageMenu
-            client={client}
-            page={page}
-            // Only pages in an everyone space can be shown at the top; the server checks it again.
-            canSetTopPage={isAdmin && space?.kind === "everyone"}
-            moving={moving}
-            confirmingDelete={confirmingDelete}
-            // One panel at a time: moving and deleting do not stay open together.
-            onMove={() => {
-              setConfirmingDelete(false);
-              setMoving(true);
-            }}
-            onDelete={() => {
-              setMoving(false);
-              setConfirmingDelete(true);
-            }}
-          />
+          {!archived && (
+            <PageMenu
+              client={client}
+              page={page}
+              // Only pages in an everyone space can be shown at the top; the server checks it again.
+              canSetTopPage={isAdmin && space?.kind === "everyone"}
+              moving={moving}
+              confirmingDelete={confirmingDelete}
+              // One panel at a time: moving and deleting do not stay open together.
+              onMove={() => {
+                setConfirmingDelete(false);
+                setMoving(true);
+              }}
+              onDelete={() => {
+                setMoving(false);
+                setConfirmingDelete(true);
+              }}
+            />
+          )}
           {copy.kind === "copied" && (
             <span className="toolbar-status" role="status">
               コピーしました
@@ -118,8 +132,9 @@ export function PageView({
           )}
         </div>
       </header>
+      {archived && <ArchivedNotice />}
       {copy.kind === "failed" && <CopyFallback markdown={copy.markdown} />}
-      {moving && (
+      {moving && !archived && (
         <MovePage
           client={client}
           page={page}
@@ -131,7 +146,7 @@ export function PageView({
           }}
         />
       )}
-      {confirmingDelete && <TrashPage client={client} page={page} onCancel={() => setConfirmingDelete(false)} />}
+      {confirmingDelete && !archived && <TrashPage client={client} page={page} onCancel={() => setConfirmingDelete(false)} />}
       <article className="page-body">
         <Markdown body={page.body} origin={origin} />
       </article>

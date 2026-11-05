@@ -1,14 +1,21 @@
 import { type FormEvent, useState } from "react";
 import type { Space } from "../../../src/api/types";
-import { type SpaceActionResult, deleteSpace, renameSpace, updateSpaceSortOrder } from "../actions";
-import { EditIcon, MoreIcon, TrashIcon } from "../icons";
+import {
+  type SpaceActionResult,
+  archiveSpace,
+  deleteSpace,
+  renameSpace,
+  unarchiveSpace,
+  updateSpaceSortOrder,
+} from "../actions";
+import { ArchiveIcon, EditIcon, MoreIcon, TrashIcon } from "../icons";
 import { Link } from "../Link";
 import type { ApiClient } from "../load";
 import { navigate } from "../router";
 import { useSidebarActions } from "../sidebarStore";
 import { Menu } from "./common";
 
-type Operation = "rename" | "sortOrder" | "delete";
+type Operation = "rename" | "sortOrder" | "archive" | "unarchive" | "delete";
 
 type Failure =
   | { kind: "text"; text: string }
@@ -28,7 +35,8 @@ function parseSortOrder(value: string): number | null {
   return sortOrder;
 }
 
-// The buttons for admins to rename, reorder and delete a space other than a personal space. The caller shows them
+// The buttons for admins to rename, reorder, archive (or unarchive) and delete a space other than a personal
+// space. The caller shows them
 // only to admins, for a space with a valid id. One operation is open at a time, independently of
 // FolderActions. The caller puts it in the title row: the menu sits next to the title and the form below it.
 export function SpaceActions({ client, space, onReload }: { client: ApiClient; space: Space; onReload: () => void }) {
@@ -40,6 +48,7 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
   const sidebar = useSidebarActions();
 
   const spaceId = space.id;
+  const archived = space.archived_at !== null;
 
   function openOperation(operation: Operation) {
     setOpen(operation);
@@ -103,6 +112,12 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
         void run("sortOrder", () => updateSpaceSortOrder(client, spaceId, value));
         return;
       }
+      case "archive":
+        void run("archive", () => archiveSpace(client, spaceId));
+        return;
+      case "unarchive":
+        void run("unarchive", () => unarchiveSpace(client, spaceId));
+        return;
       case "delete":
         void run("delete", () => deleteSpace(client, spaceId));
         return;
@@ -123,6 +138,17 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
           {OPERATION_LABELS.sortOrder}
         </button>
         <hr className="menu-separator" />
+        {archived ? (
+          <button type="button" className="menu-item" onClick={() => openOperation("unarchive")} disabled={sending}>
+            <ArchiveIcon />
+            {OPERATION_LABELS.unarchive}
+          </button>
+        ) : (
+          <button type="button" className="menu-item" onClick={() => openOperation("archive")} disabled={sending}>
+            <ArchiveIcon />
+            {OPERATION_LABELS.archive}
+          </button>
+        )}
         <button
           type="button"
           className="menu-item menu-item-danger"
@@ -164,12 +190,22 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
                   autoFocus
                 />
               </label>
-              <p>
-                小さい数字ほどサイドバーの上に表示されます。同じ数字のスペースは作成順です。新しいスペースは 0
-                で作られます。個人スペースは常に一番下です。
-              </p>
+              {archived ? (
+                <p>小さい数字ほどアーカイブ一覧の上に表示されます。同じ数字のスペースは作成順です。</p>
+              ) : (
+                <p>
+                  小さい数字ほどサイドバーの上に表示されます。同じ数字のスペースは作成順です。新しいスペースは 0
+                  で作られます。個人スペースは常に一番下です。
+                </p>
+              )}
             </>
           )}
+          {open === "archive" && (
+            <p>
+              このスペースをアーカイブします。中のページやフォルダは閲覧だけになり、サイドバーやホームには表示されなくなります。サイドバーの『アーカイブ』からいつでも開けて、解除もできます。
+            </p>
+          )}
+          {open === "unarchive" && <p>アーカイブを解除して、通常のスペースに戻します。</p>}
           {open === "delete" && (
             <p>このスペースを削除します。ページ（ゴミ箱のページを含む）やフォルダが残っていると削除できません。</p>
           )}
@@ -196,11 +232,15 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
 const OPERATION_LABELS: Record<Operation, string> = {
   rename: "スペースの名前を変更",
   sortOrder: "表示順を変更",
+  archive: "スペースをアーカイブ",
+  unarchive: "アーカイブを解除",
   delete: "スペースを削除",
 };
 
 const SUBMIT_LABELS: Record<Operation, string> = {
   rename: "保存",
   sortOrder: "保存",
+  archive: "アーカイブ",
+  unarchive: "解除",
   delete: "削除",
 };

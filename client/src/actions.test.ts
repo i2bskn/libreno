@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Attachment, Page, Space, User } from "../../src/api/types";
 import {
+  archiveSpace,
   changeUserRole,
   createFolder,
   createPage,
@@ -21,6 +22,7 @@ import {
   revokeUserSessions,
   setTopPage,
   trashPage,
+  unarchiveSpace,
   updateFolder,
   updatePage,
   uploadAttachment,
@@ -527,7 +529,7 @@ describe("moveFolder", () => {
 describe("createSpace", () => {
   const url = "/api/v1/spaces";
   const input = { kind: "admin", name: "運用" } as const;
-  const SPACE: Space = { id: "s2", kind: "admin", name: "運用", sort_order: 0, created_at: 1, updated_at: 1 };
+  const SPACE: Space = { id: "s2", kind: "admin", name: "運用", sort_order: 0, archived_at: null, created_at: 1, updated_at: 1 };
 
   it("sends the kind and the name and is ok with the space on 201", async () => {
     const { client, fetch } = setup(() => Response.json(SPACE, { status: 201 }), 401, url);
@@ -548,7 +550,7 @@ describe("createSpace", () => {
   it.each([
     [400, "スペースの名前は 1 文字以上 100 文字以下で、改行を含まない文字列にしてください"],
     [403, "管理者の権限が必要です"],
-    [409, "この名前のスペースはすでにあります"],
+    [409, "この名前のスペースはすでにあります（アーカイブされたスペースを含みます）"],
   ])("is an error with the API message on %i", async (code, message) => {
     const { client } = setup(apiError(code, message), 401, url);
     expect(await createSpace(client, input)).toEqual({ kind: "error", message });
@@ -633,7 +635,7 @@ describe("renameSpace", () => {
   });
 
   it("is an error with the API message on 409", async () => {
-    const message = "この名前のスペースはすでにあります";
+    const message = "この名前のスペースはすでにあります（アーカイブされたスペースを含みます）";
     const { client } = setup(apiError(409, message), 401, url);
     expect(await renameSpace(client, "s1", "a")).toEqual({ kind: "error", message });
   });
@@ -952,3 +954,70 @@ describe.each([
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe.each([
+  ["archiveSpace", archiveSpace, "/api/v1/spaces/s1/archive"],
+  ["unarchiveSpace", unarchiveSpace, "/api/v1/spaces/s1/unarchive"],
+] as const)("%s", (_name, action, url) => {
+  const SPACE: Space = {
+    id: "s1",
+    kind: "everyone",
+    name: "開発",
+    sort_order: 0,
+    archived_at: null,
+    created_at: 1,
+    updated_at: 1,
+  };
+
+  it("sends POST and is ok on 200", async () => {
+    const { client, fetch } = setup(() => Response.json(SPACE), 401, url);
+    expect(await action(client, "s1")).toEqual({ kind: "ok" });
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe("POST");
+  });
+
+  it("is not found on 404", async () => {
+    const { client } = setup(apiError(404, "スペースが見つかりません"), 401, url);
+    expect(await action(client, "s1")).toEqual({ kind: "notFound" });
+  });
+
+  it("is an error with the API message on 403", async () => {
+    const message = "個人スペースはアーカイブできません";
+    const { client } = setup(apiError(403, message), 401, url);
+    expect(await action(client, "s1")).toEqual({ kind: "error", message });
+  });
+
+  it("is unknown when fetch rejects", async () => {
+    const { client } = setup(() => Promise.reject(new TypeError("Failed to fetch")), 401, url);
+    expect(await action(client, "s1")).toEqual({ kind: "unknown" });
+  });
+});
+
+// A 409 of a write to a page is a conflict, except space_archived, which is an error with the server's message.
+describe("409 space_archived", () => {
+  const message = "アーカイブされたスペースは編集できません。アーカイブを解除してから操作してください";
+  const archived = () => Response.json({ error: { code: "space_archived", message } }, { status: 409 });
+  const conflict = () => Response.json({ error: { code: "version_conflict", message: "更新されています" } }, { status: 409 });
+  const cases = [
+    ["restoreRevision", RESTORE_URL, (client: Client) => restoreRevision(client, "p1", 2, 4)],
+    ["restoreTrashedPage", "/api/v1/pages/p1/restore", (client: Client) => restoreTrashedPage(client, "p1")],
+    ["purgeTrashedPage", "/api/v1/pages/p1/permanent", (client: Client) => purgeTrashedPage(client, "p1")],
+    ["updatePage", "/api/v1/pages/p1", (client: Client) => updatePage(client, "p1", 4, { title: "B" })],
+    [
+      "movePage",
+      "/api/v1/pages/p1/move",
+      (client: Client) => movePage(client, "p1", { version: 4, spaceId: "s2", folderId: null }),
+    ],
+  ] as const;
+
+  it.each(cases)("%s is an error with the message on space_archived", async (_name, url, call) => {
+    const { client } = setup(archived, 401, url);
+    expect(await call(client)).toEqual({ kind: "error", message });
+  });
+
+  it.each(cases)("%s is still a conflict on another 409", async (_name, url, call) => {
+    const { client } = setup(conflict, 401, url);
+    expect(await call(client)).toEqual({ kind: "conflict" });
+  });
+});
+
+type Client = ReturnType<typeof createApiClient>;

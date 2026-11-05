@@ -1,4 +1,4 @@
-import { and, eq, exists, isNotNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, eq, exists, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import type { CreateFolderInput, MoveFolderInput, UpdateFolderInput } from "../api/types";
 import { clock } from "../clock";
 import type { Db } from "../db/client";
@@ -10,15 +10,16 @@ import {
   type MoveOptions,
   type VisibilityNotAcknowledged,
 } from "../spaces/access";
+import { isSpaceArchived, spaceNotArchived } from "../spaces/archive";
 import { findSpaceById } from "../spaces/queries";
-import { findAccessibleFolder, findAccessibleFolderWithSpace, findFolderById, folderExistsInSpace } from "./queries";
+import { findAccessibleFolderWithSpace, findFolderById, folderExistsInSpace } from "./queries";
 
 // Shared by the REST API and the MCP tools. Input is validated by the callers (see validation.ts).
 // D1 has no interactive transactions, so each write is one conditional statement.
 
 export type CreateFolderResult =
   | { ok: true; folder: FolderRow }
-  | { ok: false; error: "space_not_found" | "parent_not_found" };
+  | { ok: false; error: "space_not_found" | "space_archived" | "parent_not_found" };
 
 export async function createFolder(
   db: Db,
@@ -29,14 +30,17 @@ export async function createFolder(
   const space = await findSpaceById(db, spaceId);
   // Spaces the user cannot access are reported as missing so that their existence is not revealed.
   if (!space || !canAccessSpace(user, space)) return { ok: false, error: "space_not_found" };
+  // Checked after the access, so that whether a space the user cannot access is archived is not revealed.
+  if (space.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (input.parentId !== null && !(await folderExistsInSpace(db, input.parentId, space.id))) {
     return { ok: false, error: "parent_not_found" };
   }
 
   const now = clock.now();
-  // One conditional INSERT ... SELECT, so that a parent moved to another space (or a space deleted) after
-  // the checks above inserts nothing. drizzle checks that the keys are those of the table, in the same order.
-  const conditions: SQL[] = [eq(spaces.id, space.id)];
+  // One conditional INSERT ... SELECT, so that a parent moved to another space (or a space deleted or
+  // archived) after the checks above inserts nothing. drizzle checks that the keys are those of the table,
+  // in the same order.
+  const conditions: SQL[] = [eq(spaces.id, space.id), isNull(spaces.archivedAt)];
   if (input.parentId !== null) {
     conditions.push(
       sql`EXISTS (SELECT 1 FROM ${folders} p WHERE p.id = ${input.parentId} AND p.space_id = ${space.id})`,
@@ -68,16 +72,17 @@ export async function createFolder(
     if (!isForeignKeyViolation(error)) throw error;
   }
   if (folder) return { ok: true, folder };
-  // The parent was moved or deleted, or the space was deleted, after the checks above.
+  // The parent was moved or deleted, or the space was deleted or archived, after the checks above.
   if (input.parentId !== null && !(await folderExistsInSpace(db, input.parentId, space.id))) {
     return { ok: false, error: "parent_not_found" };
   }
+  if (await isSpaceArchived(db, space.id)) return { ok: false, error: "space_archived" };
   return { ok: false, error: "space_not_found" };
 }
 
 export type UpdateFolderResult =
   | { ok: true; folder: FolderRow }
-  | { ok: false; error: "not_found" | "parent_not_found" | "folder_cycle" };
+  | { ok: false; error: "not_found" | "space_archived" | "parent_not_found" | "folder_cycle" };
 
 // Renames the folder and/or moves it inside its space. No version: the last write wins.
 export async function updateFolder(
@@ -86,11 +91,18 @@ export async function updateFolder(
   folderId: string,
   input: UpdateFolderInput,
 ): Promise<UpdateFolderResult> {
-  const folder = await findAccessibleFolder(db, user, folderId);
-  if (!folder) return { ok: false, error: "not_found" };
+  const found = await findAccessibleFolderWithSpace(db, user, folderId);
+  if (!found) return { ok: false, error: "not_found" };
+  const { folder } = found;
+  if (found.space.archivedAt !== null) return { ok: false, error: "space_archived" };
 
-  // space_id keeps the write inside the space whose access was just checked.
-  const conditions: SQL[] = [eq(folders.id, folder.id), eq(folders.spaceId, folder.spaceId)];
+  // space_id keeps the write inside the space whose access was just checked, and the space must not be
+  // archived at the time of the write.
+  const conditions: SQL[] = [
+    eq(folders.id, folder.id),
+    eq(folders.spaceId, folder.spaceId),
+    spaceNotArchived(folder.spaceId),
+  ];
   const parentId = input.parentId;
   if (typeof parentId === "string") {
     conditions.push(
@@ -121,20 +133,24 @@ export async function updateFolder(
   // Access is not checked again: the folder was visible just before.
   const current = await findFolderById(db, folder.id);
   if (!current || current.spaceId !== folder.spaceId) return { ok: false, error: "not_found" };
+  if (await isSpaceArchived(db, folder.spaceId)) return { ok: false, error: "space_archived" };
   if (typeof parentId === "string" && !(await folderExistsInSpace(db, parentId, folder.spaceId))) {
     return { ok: false, error: "parent_not_found" };
   }
   return { ok: false, error: "folder_cycle" };
 }
 
-export type DeleteFolderResult = { ok: true } | { ok: false; error: "not_found" | "folder_not_empty" };
+export type DeleteFolderResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "space_archived" | "folder_not_empty" };
 
-// The condition on folders for deleting the folder: it has no folders and no pages outside the trash in it.
-// Shared by the statements of deleteFolder so that they cannot disagree.
+// The condition on folders for deleting the folder: it has no folders and no pages outside the trash in it,
+// and its space is not archived. Shared by the statements of deleteFolder so that they cannot disagree.
 function deletableFolderWhere(folder: Pick<FolderRow, "id" | "spaceId">): SQL | undefined {
   return and(
     eq(folders.id, folder.id),
     eq(folders.spaceId, folder.spaceId),
+    spaceNotArchived(folder.spaceId),
     sql`NOT EXISTS (SELECT 1 FROM ${folders} c WHERE c.parent_id = ${folder.id})`,
     sql`NOT EXISTS (SELECT 1 FROM ${pages} WHERE ${pages.folderId} = ${folder.id} AND ${pages.deletedAt} IS NULL)`,
   );
@@ -143,8 +159,10 @@ function deletableFolderWhere(folder: Pick<FolderRow, "id" | "spaceId">): SQL | 
 // Deletes the folder only if it has no folders or pages (other than pages in the trash) in it.
 // Pages in the trash of the folder move to the top level of the space.
 export async function deleteFolder(db: Db, user: UserRow, folderId: string): Promise<DeleteFolderResult> {
-  const folder = await findAccessibleFolder(db, user, folderId);
-  if (!folder) return { ok: false, error: "not_found" };
+  const found = await findAccessibleFolderWithSpace(db, user, folderId);
+  if (!found) return { ok: false, error: "not_found" };
+  const { folder } = found;
+  if (found.space.archivedAt !== null) return { ok: false, error: "space_archived" };
 
   // One batch (a transaction in D1) with the same condition in both statements, so a folder or page added
   // after the check above keeps the folder and the pages in the trash where they are.
@@ -167,12 +185,16 @@ export async function deleteFolder(db: Db, user: UserRow, folderId: string): Pro
   if (result.meta.changes === 1) return { ok: true };
   const current = await findFolderById(db, folder.id);
   if (!current || current.spaceId !== folder.spaceId) return { ok: false, error: "not_found" };
+  if (await isSpaceArchived(db, folder.spaceId)) return { ok: false, error: "space_archived" };
   return { ok: false, error: "folder_not_empty" };
 }
 
 export type MoveFolderResult =
   | { ok: true; folder: FolderRow }
-  | { ok: false; error: "not_found" | "space_not_found" | "parent_not_found" | "folder_cycle" }
+  | {
+      ok: false;
+      error: "not_found" | "space_not_found" | "space_archived" | "parent_not_found" | "folder_cycle";
+    }
   | VisibilityNotAcknowledged;
 
 // The ids of the folder and the folders inside it, at any depth, as a subquery. UNION (not UNION ALL)
@@ -192,6 +214,7 @@ function subtreeIds(rootId: string): SQL {
 //   statement, so the subtree and "the parent is not in the subtree" do not change either.
 // - "The parent is in the destination space" could change only if the parent were in the subtree, which
 //   the condition rules out.
+// - No statement changes archived_at, so "neither space is archived" does not change either.
 function folderMoveGuard(
   folder: Pick<FolderRow, "id" | "spaceId">,
   destSpaceId: string,
@@ -199,7 +222,8 @@ function folderMoveGuard(
 ): SQL | undefined {
   const conditions: SQL[] = [
     sql`EXISTS (SELECT 1 FROM ${folders} r WHERE r.id = ${folder.id} AND r.space_id = ${folder.spaceId})`,
-    sql`EXISTS (SELECT 1 FROM ${spaces} s WHERE s.id = ${destSpaceId})`,
+    spaceNotArchived(folder.spaceId),
+    spaceNotArchived(destSpaceId),
   ];
   if (parentId !== null) {
     conditions.push(
@@ -224,9 +248,11 @@ export async function moveFolder(
   const found = await findAccessibleFolderWithSpace(db, user, folderId);
   if (!found) return { ok: false, error: "not_found" };
   const { folder, space: source } = found;
+  if (source.archivedAt !== null) return { ok: false, error: "space_archived" };
   const dest = await findSpaceById(db, input.spaceId);
   // Spaces the user cannot access are reported as missing so that their existence is not revealed.
   if (!dest || !canAccessSpace(user, dest)) return { ok: false, error: "space_not_found" };
+  if (dest.archivedAt !== null) return { ok: false, error: "space_archived" };
   // Checked with the same source space as the condition of the writes: if the folder moves to another
   // space after this, the writes change nothing.
   const notAcknowledged = visibilityNotAcknowledged(source, dest, options);
@@ -275,7 +301,10 @@ export async function moveFolder(
   // Access is not checked again: the folder and the destination space were visible just before.
   const current = await findFolderById(db, folder.id);
   if (!current || current.spaceId !== folder.spaceId) return { ok: false, error: "not_found" };
-  if (!(await findSpaceById(db, dest.id))) return { ok: false, error: "space_not_found" };
+  if (await isSpaceArchived(db, folder.spaceId)) return { ok: false, error: "space_archived" };
+  const currentDest = await findSpaceById(db, dest.id);
+  if (!currentDest) return { ok: false, error: "space_not_found" };
+  if (currentDest.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (input.parentId !== null) {
     if (!(await folderExistsInSpace(db, input.parentId, dest.id))) return { ok: false, error: "parent_not_found" };
     return { ok: false, error: "folder_cycle" };

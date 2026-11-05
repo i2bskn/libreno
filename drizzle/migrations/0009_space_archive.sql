@@ -1,0 +1,1 @@
+ALTER TABLE `spaces` ADD `archived_at` integer;

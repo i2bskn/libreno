@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { apiError, requireAdmin, requireUser } from "../auth/middleware";
 import { getTopPage, setTopPage } from "../pages/top-page";
 import { pageNotFoundMessage } from "../pages/validation";
+import { spaceArchivedMessage } from "../spaces/archive";
 import { jsonBody, toApiPage } from "./api";
 
 const setTopPageBody = jsonBody<SetTopPageRequest, SetTopPageRequest>((body, c) => {
@@ -27,6 +28,7 @@ const topPageApi = new Hono<AppEnv>()
       const body: TopPage = { page: result.page ? toApiPage(result.page) : null };
       return c.json(body, 200);
     }
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     if (result.error === "not_everyone_space") {
       return apiError(c, 400, "not_everyone_space", "トップに表示できるのは全員スペースのページだけです");
     }

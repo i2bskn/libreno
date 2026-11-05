@@ -4,7 +4,7 @@ import { Link } from "../Link";
 import { type ApiClient, loadPageHistoryView, useView } from "../load";
 import { isValidId } from "../router";
 import { useSidebarLocation, viewLocation } from "../sidebarStore";
-import { ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import { ArchivedNotice, BreadcrumbRoot, ViewStatus, isArchived, useDocumentTitle, viewTitle } from "./common";
 
 export function PageHistoryView({ client, id }: { client: ApiClient; id: string }) {
   const [state, reload] = useView(() => loadPageHistoryView(client, id), id);
@@ -23,13 +23,12 @@ export function PageHistoryView({ client, id }: { client: ApiClient; id: string 
   }
   const { page, space, revisions } = state.data;
   const spaceName = space ? spaceDisplayName(space) : "スペース";
+  const archived = isArchived(space);
   return (
     <main className="main">
       <nav className="breadcrumbs" aria-label="パンくずリスト">
         <ol>
-          <li>
-            <Link to="/">スペース</Link>
-          </li>
+          <BreadcrumbRoot archived={archived} />
           <li>{isValidId(page.space_id) ? <Link to={`/spaces/${page.space_id}`}>{spaceName}</Link> : spaceName}</li>
           <li>
             <Link to={`/pages/${id}`}>{page.title}</Link>
@@ -38,6 +37,7 @@ export function PageHistoryView({ client, id }: { client: ApiClient; id: string 
         </ol>
       </nav>
       <h1>「{page.title}」の履歴</h1>
+      {archived && <ArchivedNotice />}
       {/* Every row has the version, its title and when it was saved, and opens that version. */}
       <ul className="revisions">
         <li>

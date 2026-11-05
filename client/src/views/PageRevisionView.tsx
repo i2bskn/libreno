@@ -7,7 +7,7 @@ import { type ApiClient, loadPageRevisionView, useView } from "../load";
 import { Markdown } from "../Markdown";
 import { navigate } from "../router";
 import { useSidebarActions, useSidebarLocation, viewLocation } from "../sidebarStore";
-import { ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import { ArchivedNotice, ViewStatus, isArchived, useDocumentTitle, viewTitle } from "./common";
 
 export function PageRevisionView({
   client,
@@ -35,7 +35,10 @@ export function PageRevisionView({
     // A missing page and a missing revision share the message: a screen has one not found message.
     return <ViewStatus state={state} notFoundMessage="この版は見つかりません" onReload={reload} />;
   }
-  const { page, revision } = state.data;
+  const { page, space, revision } = state.data;
+  // A page of an archived space cannot go back to a revision. When the space could not be loaded, the button
+  // is shown and the server decides.
+  const archived = isArchived(space);
   return (
     <main className="main">
       <nav className="breadcrumbs" aria-label="パンくずリスト">
@@ -54,9 +57,10 @@ export function PageRevisionView({
           この版は過去の内容です。<Link to={`/pages/${id}`}>現在のページ</Link>・
           <Link to={`/pages/${id}/history`}>履歴の一覧</Link>
         </p>
-        <RestoreRevision client={client} page={page} revision={revision} onReload={reload} />
+        {!archived && <RestoreRevision client={client} page={page} revision={revision} onReload={reload} />}
       </div>
       <h1>版 {revision.version}</h1>
+      {archived && <ArchivedNotice />}
       <p className="page-meta">
         保存: <time dateTime={new Date(revision.created_at).toISOString()}>{formatDateTime(revision.created_at)}</time>
       </p>

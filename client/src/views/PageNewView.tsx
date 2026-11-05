@@ -8,7 +8,7 @@ import { Link } from "../Link";
 import { type ApiClient, type PageNewData, loadPageNewView, useView } from "../load";
 import { isValidId, navigate } from "../router";
 import { useSidebarActions, useSidebarLocation, viewLocation } from "../sidebarStore";
-import { ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import { ArchivedNotice, ViewStatus, isArchived, useDocumentTitle, viewTitle } from "./common";
 import {
   DraftNotice,
   EMPTY_TITLE_MESSAGE,
@@ -48,6 +48,20 @@ export function PageNewView({
 
   if (state.kind !== "ready") {
     return <ViewStatus state={state} notFoundMessage="スペースが見つかりません" onReload={reload} />;
+  }
+  // No page can be created in an archived space: the form is not shown, so that nothing is typed in vain.
+  if (isArchived(state.data.space)) {
+    return (
+      <main className="main">
+        <h1>新しいページ</h1>
+        <ArchivedNotice />
+        {isValidId(spaceId) && (
+          <p>
+            <Link to={`/spaces/${spaceId}`}>スペースへ戻る</Link>
+          </p>
+        )}
+      </main>
+    );
   }
   return (
     <PageNewForm

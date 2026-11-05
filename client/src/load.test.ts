@@ -12,6 +12,7 @@ import type {
 } from "../../src/api/types";
 import { createApiClient, createApiFetch } from "./api";
 import {
+  loadArchiveView,
   loadBacklinks,
   loadFolderView,
   loadHomeView,
@@ -28,7 +29,7 @@ import {
   loadUsersView,
 } from "./load";
 
-const SPACE: Space = { id: "s1", kind: "everyone", name: "開発", sort_order: 0, created_at: 1, updated_at: 2 };
+const SPACE: Space = { id: "s1", kind: "everyone", name: "開発", sort_order: 0, archived_at: null, created_at: 1, updated_at: 2 };
 const SUMMARY: PageSummary = {
   id: "p1",
   space_id: "s1",
@@ -510,14 +511,27 @@ describe("loadPageHistoryView", () => {
 });
 
 describe("loadPageRevisionView", () => {
-  it("shows the revision with the current page", async () => {
+  it("shows the revision with the current page and its space", async () => {
     const { client } = setup({
       "/api/v1/pages/p1/revisions/1": [json(200, REVISION)],
       "/api/v1/pages/p1": [json(200, PAGE)],
+      "/api/v1/spaces/s1": [json(200, SPACE)],
     });
     expect(await loadPageRevisionView(client, "p1", 1)).toEqual({
       kind: "ready",
-      data: { page: PAGE, revision: REVISION },
+      data: { page: PAGE, space: SPACE, revision: REVISION },
+    });
+  });
+
+  it("shows the revision without the space when the space cannot be loaded", async () => {
+    const { client } = setup({
+      "/api/v1/pages/p1/revisions/1": [json(200, REVISION)],
+      "/api/v1/pages/p1": [json(200, PAGE)],
+      "/api/v1/spaces/s1": [apiError(500, "サーバーでエラーが発生しました")],
+    });
+    expect(await loadPageRevisionView(client, "p1", 1)).toEqual({
+      kind: "ready",
+      data: { page: PAGE, space: null, revision: REVISION },
     });
   });
 
@@ -692,7 +706,7 @@ describe("loadFolderView", () => {
 
 describe("loadSearchView", () => {
   const HIT: SearchHit = { ...SUMMARY, snippet: "…手順…" };
-  const PERSONAL: Space = { id: "s2", kind: "personal", name: null, sort_order: 0, created_at: 1, updated_at: 2 };
+  const PERSONAL: Space = { id: "s2", kind: "personal", name: null, sort_order: 0, archived_at: null, created_at: 1, updated_at: 2 };
   const SEARCH_URL = "/api/v1/search?q=%E6%89%8B%E9%A0%86";
 
   it("shows the hits with the names of their spaces", async () => {
@@ -798,5 +812,19 @@ describe("loadUsersView", () => {
     });
     expect(await loadUsersView(client)).toEqual({ kind: "redirecting" });
     expect(redirectToLogin).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("loadArchiveView", () => {
+  const ARCHIVED: Space = { ...SPACE, archived_at: 3 };
+
+  it("shows the archived spaces", async () => {
+    const { client } = setup({ "/api/v1/spaces?archived=true": [json(200, { spaces: [ARCHIVED] })] });
+    expect(await loadArchiveView(client)).toEqual({ kind: "ready", data: [ARCHIVED] });
+  });
+
+  it("is an error with the API message on 500", async () => {
+    const { client } = setup({ "/api/v1/spaces?archived=true": [apiError(500, "サーバーでエラーが発生しました")] });
+    expect(await loadArchiveView(client)).toEqual({ kind: "error", message: "サーバーでエラーが発生しました" });
   });
 });

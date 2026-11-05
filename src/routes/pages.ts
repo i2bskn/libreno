@@ -35,6 +35,7 @@ import { findAccessiblePage } from "../pages/queries";
 import { findAccessiblePageRevision, listAccessiblePageRevisions, restorePageRevision } from "../pages/revisions";
 import { movePage, updatePage } from "../pages/service";
 import { purgeTrashedPage, restoreTrashedPage, trashPage } from "../pages/trash";
+import { spaceArchivedMessage } from "../spaces/archive";
 import {
   emptyUpdateMessage,
   invalidPageBodyMessage,
@@ -135,6 +136,7 @@ const pagesApi = new Hono<AppEnv>()
     const result = await updatePage(c.get("db"), c.get("user"), c.req.param("id"), c.req.valid("json"));
     if (result.ok) return c.json(toApiPage(result.page), 200);
     if (result.error === "not_found") return apiError(c, 404, "not_found", pageNotFoundMessage);
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     // 400 rather than 404: the page in the path exists, but the folder in the body does not.
     if (result.error === "folder_not_found") return apiError(c, 400, "folder_not_found", folderNotFoundMessage);
     return apiError(c, 409, "version_conflict", versionConflictMessage);
@@ -150,6 +152,8 @@ const pagesApi = new Hono<AppEnv>()
     switch (result.error) {
       case "not_found":
         return apiError(c, 404, "not_found", pageNotFoundMessage);
+      case "space_archived":
+        return apiError(c, 409, "space_archived", spaceArchivedMessage);
       // 400 rather than 404: the page in the path exists, but the space or folder in the body does not.
       case "space_not_found":
         return apiError(c, 400, "space_not_found", moveSpaceNotFoundMessage);
@@ -186,6 +190,7 @@ const pagesApi = new Hono<AppEnv>()
     );
     if (result.ok) return c.json(toApiPage(result.page), 200);
     if (result.error === "not_found") return apiError(c, 404, "not_found", pageNotFoundMessage);
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     if (result.error === "revision_not_found") return apiError(c, 404, "revision_not_found", revisionNotFoundMessage);
     return apiError(c, 409, "version_conflict", versionConflictMessage);
   })
@@ -226,6 +231,8 @@ const pagesApi = new Hono<AppEnv>()
           return apiError(c, 400, "upload_failed", uploadFailedMessage);
         case "not_found":
           return apiError(c, 404, "not_found", pageNotFoundMessage);
+        case "space_archived":
+          return apiError(c, 409, "space_archived", spaceArchivedMessage);
       }
     }
     return c.json(toApiAttachment(result.attachment), 201);
@@ -233,6 +240,7 @@ const pagesApi = new Hono<AppEnv>()
   // Moves the page to the trash of its space. It can be restored for 30 days (see pages/trash.ts).
   .delete("/:id", requireUser, async (c) => {
     const result = await trashPage(c.get("db"), c.get("user"), c.req.param("id"));
+    if (!result.ok && result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     if (!result.ok) return apiError(c, 404, "not_found", pageNotFoundMessage);
     return c.body(null, 204);
   })
@@ -240,6 +248,7 @@ const pagesApi = new Hono<AppEnv>()
     const result = await restoreTrashedPage(c.get("db"), c.get("user"), c.req.param("id"));
     if (result.ok) return c.json(toApiPage(result.page), 200);
     if (result.error === "not_found") return apiError(c, 404, "not_found", pageNotFoundMessage);
+    if (result.error === "space_archived") return apiError(c, 409, "space_archived", spaceArchivedMessage);
     return apiError(c, 409, "not_in_trash", notInTrashOnRestoreMessage);
   })
   // Deletes a page in the trash with its revisions. This cannot be undone.
@@ -249,6 +258,8 @@ const pagesApi = new Hono<AppEnv>()
     switch (result.error) {
       case "not_found":
         return apiError(c, 404, "not_found", pageNotFoundMessage);
+      case "space_archived":
+        return apiError(c, 409, "space_archived", spaceArchivedMessage);
       case "not_in_trash":
         return apiError(c, 409, "not_in_trash", notInTrashOnPurgeMessage);
       case "forbidden_role":

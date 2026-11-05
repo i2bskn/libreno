@@ -113,6 +113,16 @@ export function TrashIcon() {
   );
 }
 
+export function ArchiveIcon() {
+  return (
+    <Icon>
+      <path d="M3.5 5.5a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v2.5h-17z" />
+      <path d="M5 8v10.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+      <path d="M10 12h4" />
+    </Icon>
+  );
+}
+
 export function UsersIcon() {
   return (
     <Icon>
