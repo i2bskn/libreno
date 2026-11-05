@@ -3,12 +3,13 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Page, PageList, SearchResult, TrashList } from "../src/api/types";
-import { clock } from "../src/clock";
+import { clock } from "@i2bskn/workers-app-core";
 import { folders, pages, spaces, type FolderRow, type PageRow, type SpaceRow, type UserRow } from "../src/db/schema";
 import { pageUpdateWhere } from "../src/pages/service";
 import { purgeExpiredTrash, TRASH_RETENTION_MS } from "../src/pages/trash";
 import worker from "../src/index";
 import {
+  appDb,
   createUser,
   db,
   insertFolder,
@@ -364,12 +365,12 @@ describe("purgeExpiredTrash", () => {
       .bind(crypto.randomUUID(), expired.id, T0)
       .run();
 
-    expect(await purgeExpiredTrash(db, now)).toBe(1);
+    expect(await purgeExpiredTrash(appDb, now)).toBe(1);
     expect(await readPage(expired.id)).toBeUndefined();
     expect(await countRevisions(expired.id)).toBe(0);
     expect(await readPage(recent.id)).toEqual(recent);
     expect(await readPage(page.id)).toEqual(page);
-    expect(await purgeExpiredTrash(db, now)).toBe(0);
+    expect(await purgeExpiredTrash(appDb, now)).toBe(0);
   });
 });
 

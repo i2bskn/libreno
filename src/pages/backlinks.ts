@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import type { Db } from "../db/client";
+import type { Db } from "@i2bskn/workers-app-core";
 import { pages, spaces } from "../db/schema";
 import { accessibleSpacesWhere, type SpaceViewer } from "../spaces/access";
 import { findAccessiblePage, type PageSummaryRow } from "./queries";

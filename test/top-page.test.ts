@@ -2,11 +2,12 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TopPage } from "../src/api/types";
-import { clock } from "../src/clock";
+import { clock } from "@i2bskn/workers-app-core";
 import { pages, siteSettings, spaces, type PageRow, type SpaceRow, type UserRow } from "../src/db/schema";
 import { purgeExpiredTrash, TRASH_RETENTION_MS } from "../src/pages/trash";
 import { setTopPage } from "../src/pages/top-page";
 import {
+  appDb,
   createUser,
   db,
   dbChangingBefore,
@@ -231,7 +232,7 @@ describe("the page after it is set", () => {
       .set({ deletedAt: now - TRASH_RETENTION_MS, deletedBy: admin.id })
       .where(eq(pages.id, page.id))
       .run();
-    expect(await purgeExpiredTrash(db, now)).toBe(1);
+    expect(await purgeExpiredTrash(appDb, now)).toBe(1);
     expect(await readSettings()).toMatchObject({ topPageId: null });
   });
 
@@ -263,7 +264,7 @@ describe("changes between the checks and the write", () => {
 
   it("does not replace the setting with a page moved to an admin space right before the statement runs", async () => {
     const first = await insertPage({ spaceId: everyone.id });
-    expect((await setTopPage(db, admin, first.id)).ok).toBe(true);
+    expect((await setTopPage(appDb, admin, first.id)).ok).toBe(true);
     const changing = dbChangingBefore(/INSERT INTO site_settings/i, () => moveToSpace(page.id, adminSpace.id));
     const result = await setTopPage(changing, admin, page.id);
     expect(result).toEqual({ ok: false, error: "not_everyone_space" });

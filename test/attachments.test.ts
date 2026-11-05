@@ -18,11 +18,11 @@ import {
   normalizeAttachmentFilename,
   withAttachmentExtension,
 } from "../src/attachments/validation";
-import { clock } from "../src/clock";
-import { createDb, type Db } from "../src/db/client";
+import { clock, createDb, type Db } from "@i2bskn/workers-app-core";
 import { attachments, pages, spaces, type SpaceRow, type UserRow } from "../src/db/schema";
 import worker from "../src/index";
 import {
+  appDb,
   createUser,
   db,
   insertPage,
@@ -641,7 +641,7 @@ describe("receiveUpload", () => {
   }
 
   function receive(req: Request, pageId: string) {
-    return receiveUpload(db, env.ATTACHMENTS, member, pageId, "file", req);
+    return receiveUpload(appDb, env.ATTACHMENTS, member, pageId, "file", req);
   }
 
   it("streams a body with Content-Length", async () => {
@@ -751,7 +751,7 @@ describe("createAttachment with a stream", () => {
   it("cancels the stream when the page is not found", async () => {
     const page = await insertPage({ spaceId: everyone.id, deletedAt: T0, deletedBy: member.id });
     const calls = { pulls: 0, canceled: false };
-    const result = await createAttachment(db, env.ATTACHMENTS, member, page.id, {
+    const result = await createAttachment(appDb, env.ATTACHMENTS, member, page.id, {
       filename: "a.png",
       contentType: "image/png",
       content: { kind: "stream", stream: streamOf(PNG, 4, calls) },
@@ -783,7 +783,7 @@ describe("createAttachment with a stream", () => {
     await reader.read().catch(() => {});
     reader.releaseLock();
     await expect(stream.cancel()).rejects.toThrow("connection lost");
-    const result = await createAttachment(db, env.ATTACHMENTS, member, page.id, {
+    const result = await createAttachment(appDb, env.ATTACHMENTS, member, page.id, {
       filename: "a.png",
       contentType: "image/png",
       content: { kind: "stream", stream },
@@ -951,10 +951,10 @@ describe("sweepOrphanAttachments", () => {
     await putObject(otherKey);
 
     // Within 24 hours of the upload: nothing is deleted.
-    expect(await sweepOrphanAttachments(db, env.ATTACHMENTS, Date.now())).toBe(0);
+    expect(await sweepOrphanAttachments(appDb, env.ATTACHMENTS, Date.now())).toBe(0);
     expect(await objectKeys()).toHaveLength(4);
 
-    const count = await sweepOrphanAttachments(db, env.ATTACHMENTS, Date.now() + DAY + 60_000);
+    const count = await sweepOrphanAttachments(appDb, env.ATTACHMENTS, Date.now() + DAY + 60_000);
     expect(count).toBe(1);
     expect(await objectKeys()).toEqual([attachmentKey(kept.id), "attachments/not-a-uuid", otherKey].sort());
     expect(await env.ATTACHMENTS.head(attachmentKey(orphan))).toBeNull();
@@ -975,7 +975,7 @@ describe("sweepOrphanAttachments", () => {
     } as unknown as R2Bucket;
 
     // 6 objects, 2 per call.
-    const count = await sweepOrphanAttachments(db, bucket, Date.now() + 2 * DAY, 2);
+    const count = await sweepOrphanAttachments(appDb, bucket, Date.now() + 2 * DAY, 2);
     expect(count).toBe(5);
     expect(listCalls).toBe(3);
     expect(await objectKeys()).toEqual([attachmentKey(kept.id)]);

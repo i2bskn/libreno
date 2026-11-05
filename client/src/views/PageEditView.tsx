@@ -245,7 +245,7 @@ function PageEditForm({
       <nav className="breadcrumbs" aria-label="パンくずリスト">
         <ol>
           <li>
-            <Link to="/">スペース</Link>
+            <Link to="/">ホーム</Link>
           </li>
           <li>{isValidId(page.space_id) ? <Link to={`/spaces/${page.space_id}`}>{spaceName}</Link> : spaceName}</li>
           {path.map((folder) => (

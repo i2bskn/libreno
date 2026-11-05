@@ -1,7 +1,6 @@
 import { and, eq, exists, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import type { CreateFolderInput, MoveFolderInput, UpdateFolderInput } from "../api/types";
-import { clock } from "../clock";
-import type { Db } from "../db/client";
+import { clock, type Db } from "@i2bskn/workers-app-core";
 import { isForeignKeyViolation } from "../db/errors";
 import { folders, pages, spaces, type FolderRow, type UserRow } from "../db/schema";
 import {

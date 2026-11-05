@@ -2,11 +2,12 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Folder, FolderList, Page, PageList, PageRevisionList, SearchResult, TrashList } from "../src/api/types";
-import { clock } from "../src/clock";
+import { clock } from "@i2bskn/workers-app-core";
 import { folders, pages, spaces, type FolderRow, type PageRow, type SpaceRow, type UserRow } from "../src/db/schema";
 import { createFolder, moveFolder } from "../src/folders/service";
 import { createPage, movePage } from "../src/pages/service";
 import {
+  appDb,
   countFolders,
   countPages,
   createUser,
@@ -521,7 +522,7 @@ describe("creating in a folder of another space", () => {
 
   it("creates a folder and a page with all their columns", async () => {
     const parent = await insertFolder({ spaceId: everyone.id });
-    const folder = await createFolder(db, member, everyone.id, { name: "Child", parentId: parent.id });
+    const folder = await createFolder(appDb, member, everyone.id, { name: "Child", parentId: parent.id });
     expect(folder.ok && (await readFolder(folder.folder.id))).toEqual({
       id: expect.any(String),
       spaceId: everyone.id,
@@ -532,7 +533,7 @@ describe("creating in a folder of another space", () => {
       createdAt: T0,
       updatedAt: T0,
     });
-    const page = await createPage(db, member, everyone.id, { title: "T", body: "B", folderId: null });
+    const page = await createPage(appDb, member, everyone.id, { title: "T", body: "B", folderId: null });
     expect(page.ok && (await readPage(page.page.id))).toEqual({
       id: expect.any(String),
       spaceId: everyone.id,

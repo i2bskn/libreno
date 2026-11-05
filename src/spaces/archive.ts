@@ -1,6 +1,5 @@
 import { and, eq, isNotNull, isNull, ne, sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import { clock } from "../clock";
-import type { Db } from "../db/client";
+import { clock, type Db } from "@i2bskn/workers-app-core";
 import { spaces, type SpaceRow } from "../db/schema";
 import { canAccessSpace, type SpaceViewer } from "./access";
 import { findSpaceById } from "./queries";

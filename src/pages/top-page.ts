@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
-import { clock } from "../clock";
-import type { Db } from "../db/client";
+import { clock, type Db } from "@i2bskn/workers-app-core";
 import { siteSettings, type PageRow, type UserRow } from "../db/schema";
 import { findSpaceById } from "../spaces/queries";
 import { findAccessiblePage, findAccessiblePageIncludingTrash, findPageById } from "./queries";

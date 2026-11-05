@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Attachment, BacklinkList, SearchResult, Space, SpaceList, TopPage } from "../src/api/types";
 import { createAttachment, deleteAttachment } from "../src/attachments/service";
-import { clock } from "../src/clock";
+import { clock } from "@i2bskn/workers-app-core";
 import { attachments, folders, pages, spaces, type FolderRow, type PageRow, type SpaceRow, type UserRow } from "../src/db/schema";
 import { createFolder, deleteFolder, moveFolder, updateFolder } from "../src/folders/service";
 import { restorePageRevision } from "../src/pages/revisions";
@@ -11,6 +11,7 @@ import { createPage, movePage, updatePage } from "../src/pages/service";
 import { setTopPage } from "../src/pages/top-page";
 import { purgeTrashedPage, restoreTrashedPage, trashPage } from "../src/pages/trash";
 import {
+  appDb,
   createUser,
   db,
   dbChangingBefore,
@@ -412,7 +413,7 @@ describe("writes to an archived space", () => {
       });
       await unarchive(space.id);
       // A revision to restore.
-      expect((await updatePage(db, member, page.id, { version: 1, body: "second" })).ok).toBe(true);
+      expect((await updatePage(appDb, member, page.id, { version: 1, body: "second" })).ok).toBe(true);
       expect(await restorePageRevision(archivingBefore(/^update "pages"/i), member, page.id, 1, 2)).toEqual({
         ok: false,
         error: "space_archived",
@@ -465,7 +466,7 @@ describe("writes to an archived space", () => {
       expect(await objectCount()).toBe(0);
 
       await unarchive(space.id);
-      const created = await createAttachment(db, env.ATTACHMENTS, member, page.id, {
+      const created = await createAttachment(appDb, env.ATTACHMENTS, member, page.id, {
         filename: "file.png",
         contentType: "image/png",
         content: { kind: "bytes", bytes: PNG },

@@ -1,5 +1,6 @@
 /*
-  The screens served by the Worker: login, setup, logout, MCP consent and errors (src/views).
+  The screens served by the Worker: login, setup, logout, MCP consent and errors (@i2bskn/workers-app-core,
+  with the layout in src/views/layout.tsx).
   The tokens are the same as in client/src/styles.css; keep them in sync.
 */
 

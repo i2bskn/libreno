@@ -1,5 +1,5 @@
 import { inArray } from "drizzle-orm";
-import type { Db } from "../db/client";
+import type { Db } from "@i2bskn/workers-app-core";
 import { attachments } from "../db/schema";
 
 // Objects in R2 under attachments/ whose row is gone are deleted by the scheduled job, after

@@ -2,13 +2,13 @@ import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import type { Space, SpaceList } from "../src/api/types";
-import { issueSession } from "../src/auth/sessions";
-import { isUniqueViolation } from "../src/auth/users";
-import { clock } from "../src/clock";
+import { clock, isUniqueViolation } from "@i2bskn/workers-app-core";
 import { spaces, users, type SpaceRow, type UserRow } from "../src/db/schema";
 import { accessibleSpacesWhere, canAccessSpace } from "../src/spaces/access";
 import { insertPersonalSpaceStatement } from "../src/spaces/queries";
+import { core } from "../src/core";
 import {
+  appDb,
   countFolders,
   countPages,
   countPersonalSpaces,
@@ -503,7 +503,7 @@ describe("personal space backfill at login", () => {
 
   it("creates a missing personal space on POST /auth/refresh", async () => {
     const legacy = await createUserWithoutSpace({ email: "legacy@example.com" });
-    const session = await issueSession(db, legacy.id, "password", T0);
+    const session = await core.issueSession(appDb, legacy.id, "password", T0);
     const cookies = { "__Host-libreno_rt": session.refreshToken };
 
     const res = await send("/auth/refresh", { method: "POST", cookies });
@@ -513,7 +513,7 @@ describe("personal space backfill at login", () => {
 
   it("creates a missing personal space on GET /auth/login with a refresh cookie", async () => {
     const legacy = await createUserWithoutSpace({ email: "legacy@example.com" });
-    const session = await issueSession(db, legacy.id, "password", T0);
+    const session = await core.issueSession(appDb, legacy.id, "password", T0);
     const cookies = { "__Host-libreno_rt": session.refreshToken };
 
     const res = await send("/auth/login?next=/", { cookies });

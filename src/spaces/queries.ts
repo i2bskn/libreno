@@ -1,5 +1,5 @@
 import { asc, eq, sql } from "drizzle-orm";
-import type { Db } from "../db/client";
+import type { Db } from "@i2bskn/workers-app-core";
 import { spaces, type SpaceRow } from "../db/schema";
 
 // Inserts the user's personal space only if the user exists and has none yet (idempotent).

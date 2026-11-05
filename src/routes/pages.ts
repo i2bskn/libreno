@@ -20,7 +20,8 @@ import {
   unsupportedTypeMessage,
   uploadFailedMessage,
 } from "../attachments/validation";
-import { apiError, requireAdmin, requireUser } from "../auth/middleware";
+import { apiError } from "@i2bskn/workers-app-core";
+import { core } from "../core";
 import {
   folderNotFoundMessage,
   invalidFolderIdMessage,
@@ -63,6 +64,8 @@ import {
 } from "./api";
 import { attachmentBodyLimit, attachmentFilenameQuery } from "./attachments";
 
+const { requireAdmin, requireUser } = core.middleware;
+
 function invalidTitle(c: Context<AppEnv>): Response {
   return apiError(c, 400, "invalid_title", invalidTitleMessage);
 }
@@ -76,7 +79,7 @@ function invalidFolderId(c: Context<AppEnv>): Response {
   return apiError(c, 400, "invalid_folder_id", invalidFolderIdMessage);
 }
 
-export const createPageBody = jsonBody<CreatePageRequest, CreatePageInput>((body, c) => {
+export const createPageBody = jsonBody<CreatePageRequest, CreatePageInput, AppEnv>((body, c) => {
   const title = normalizePageTitle(body.title);
   if (title === null) return invalidTitle(c);
   if (!isValidPageBody(body.body)) return invalidPageBody(c);
@@ -85,7 +88,7 @@ export const createPageBody = jsonBody<CreatePageRequest, CreatePageInput>((body
   return { ok: true, value: { title, body: body.body, folderId: folderId.value ?? null } };
 });
 
-const updatePageBody = jsonBody<UpdatePageRequest, UpdatePageInput>((body, c) => {
+const updatePageBody = jsonBody<UpdatePageRequest, UpdatePageInput, AppEnv>((body, c) => {
   const version = normalizeVersion(body.version);
   if (version === null) return apiError(c, 400, "invalid_version", invalidVersionMessage);
   if (body.title === undefined && body.body === undefined && body.folder_id === undefined) {
@@ -110,7 +113,7 @@ const updatePageBody = jsonBody<UpdatePageRequest, UpdatePageInput>((body, c) =>
 });
 
 // Validated in the order version, space_id, folder_id.
-const movePageBody = jsonBody<MovePageRequest, MovePageInput>((body, c) => {
+const movePageBody = jsonBody<MovePageRequest, MovePageInput, AppEnv>((body, c) => {
   const version = normalizeVersion(body.version);
   if (version === null) return apiError(c, 400, "invalid_version", invalidVersionMessage);
   const spaceId = normalizeMoveSpaceId(body.space_id);
@@ -120,11 +123,13 @@ const movePageBody = jsonBody<MovePageRequest, MovePageInput>((body, c) => {
   return { ok: true, value: { version, spaceId, folderId: folderId.value ?? null } };
 });
 
-const restorePageRevisionBody = jsonBody<RestorePageRevisionRequest, RestorePageRevisionRequest>((body, c) => {
-  const version = normalizeVersion(body.version);
-  if (version === null) return apiError(c, 400, "invalid_version", invalidVersionMessage);
-  return { ok: true, value: { version } };
-});
+const restorePageRevisionBody = jsonBody<RestorePageRevisionRequest, RestorePageRevisionRequest, AppEnv>(
+  (body, c) => {
+    const version = normalizeVersion(body.version);
+    if (version === null) return apiError(c, 400, "invalid_version", invalidVersionMessage);
+    return { ok: true, value: { version } };
+  },
+);
 
 const pagesApi = new Hono<AppEnv>()
   .get("/:id", requireUser, async (c) => {

@@ -1,7 +1,8 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { AppEnv } from "../env";
-import { apiError, requireUser } from "../auth/middleware";
+import { apiError } from "@i2bskn/workers-app-core";
+import { core } from "../core";
 import { attachmentKey, deleteAttachment, findAccessibleAttachment } from "../attachments/service";
 import {
   ATTACHMENT_MAX_BYTES,
@@ -12,6 +13,8 @@ import {
 } from "../attachments/validation";
 import type { AttachmentRow } from "../db/schema";
 import { spaceArchivedMessage } from "../spaces/archive";
+
+const { requireUser } = core.middleware;
 
 // The middleware of POST /api/v1/pages/:id/attachments (in pages.ts).
 

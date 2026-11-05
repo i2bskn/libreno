@@ -1,13 +1,16 @@
 import { Hono } from "hono";
 import type { SetTopPageRequest, TopPage } from "../api/types";
 import type { AppEnv } from "../env";
-import { apiError, requireAdmin, requireUser } from "../auth/middleware";
+import { apiError } from "@i2bskn/workers-app-core";
+import { core } from "../core";
 import { getTopPage, setTopPage } from "../pages/top-page";
 import { pageNotFoundMessage } from "../pages/validation";
 import { spaceArchivedMessage } from "../spaces/archive";
 import { jsonBody, toApiPage } from "./api";
 
-const setTopPageBody = jsonBody<SetTopPageRequest, SetTopPageRequest>((body, c) => {
+const { requireAdmin, requireUser } = core.middleware;
+
+const setTopPageBody = jsonBody<SetTopPageRequest, SetTopPageRequest, AppEnv>((body, c) => {
   const pageId = body.page_id;
   if (pageId !== null && typeof pageId !== "string") {
     return apiError(c, 400, "invalid_page_id", "page_id は文字列か null にしてください");

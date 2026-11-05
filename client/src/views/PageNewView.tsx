@@ -173,7 +173,7 @@ function PageNewForm({
       <nav className="breadcrumbs" aria-label="パンくずリスト">
         <ol>
           <li>
-            <Link to="/">スペース</Link>
+            <Link to="/">ホーム</Link>
           </li>
           <li>
             <Link to={spacePath}>{spaceName}</Link>

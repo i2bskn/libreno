@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import type { Db } from "../db/client";
+import type { Db } from "@i2bskn/workers-app-core";
 import { pages, spaces } from "../db/schema";
 import { accessibleSpacesWhere, canAccessSpace, type SpaceViewer } from "../spaces/access";
 import { findSpaceById } from "../spaces/queries";

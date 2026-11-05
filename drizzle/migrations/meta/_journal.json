@@ -71,6 +71,13 @@
       "when": 1793840956053,
       "tag": "0009_space_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793854961435,
+      "tag": "0010_mcp_revoked_at",
+      "breakpoints": true
     }
   ]
 }

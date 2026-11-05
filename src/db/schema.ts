@@ -8,49 +8,11 @@ import {
   uniqueIndex,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import { users } from "@i2bskn/workers-app-core/schema";
 
-export const users = sqliteTable(
-  "users",
-  {
-    id: text("id").primaryKey(),
-    email: text("email").notNull().unique(),
-    name: text("name"),
-    role: text("role", { enum: ["admin", "member"] }).notNull(),
-    passwordHash: text("password_hash"),
-    oidcIssuer: text("oidc_issuer"),
-    oidcSubject: text("oidc_subject"),
-    createdAt: integer("created_at").notNull(),
-    updatedAt: integer("updated_at").notNull(),
-    lastLoginAt: integer("last_login_at"),
-  },
-  (t) => [
-    uniqueIndex("users_oidc_issuer_subject_unique").on(t.oidcIssuer, t.oidcSubject),
-    check("users_role_check", sql`${t.role} IN ('admin', 'member')`),
-  ],
-);
-
-export const sessions = sqliteTable(
-  "sessions",
-  {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id),
-    familyId: text("family_id").notNull(),
-    authMode: text("auth_mode", { enum: ["oidc", "password"] }).notNull(),
-    tokenHash: text("token_hash").notNull().unique(),
-    familyExpiresAt: integer("family_expires_at").notNull(),
-    createdAt: integer("created_at").notNull(),
-    rotatedAt: integer("rotated_at"),
-    rotatedTo: text("rotated_to"),
-    revokedAt: integer("revoked_at"),
-  },
-  (t) => [
-    index("sessions_user_id_idx").on(t.userId),
-    index("sessions_family_id_idx").on(t.familyId),
-    check("sessions_auth_mode_check", sql`${t.authMode} IN ('oidc', 'password')`),
-  ],
-);
+// The tables of login and sessions, from @i2bskn/workers-app-core. Re-exported so that drizzle-kit includes them, and
+// imported for the references below (a re-export creates no local binding).
+export { users, sessions, type UserRow, type SessionRow } from "@i2bskn/workers-app-core/schema";
 
 // Pages belong to one space, and access is decided by the space kind alone.
 export const spaces = sqliteTable(
@@ -194,8 +156,6 @@ export const siteSettings = sqliteTable(
   (t) => [check("site_settings_singleton_check", sql`${t.id} = 1`)],
 );
 
-export type UserRow = typeof users.$inferSelect;
-export type SessionRow = typeof sessions.$inferSelect;
 export type SpaceRow = typeof spaces.$inferSelect;
 export type FolderRow = typeof folders.$inferSelect;
 export type PageRow = typeof pages.$inferSelect;

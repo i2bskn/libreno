@@ -8,7 +8,8 @@ import type {
   UpdateFolderRequest,
 } from "../api/types";
 import type { AppEnv } from "../env";
-import { apiError, requireUser } from "../auth/middleware";
+import { apiError } from "@i2bskn/workers-app-core";
+import { core } from "../core";
 import { findAccessibleFolder } from "../folders/queries";
 import { deleteFolder, moveFolder, updateFolder } from "../folders/service";
 import {
@@ -28,6 +29,8 @@ import {
 import { spaceArchivedMessage } from "../spaces/archive";
 import { jsonBody, toApiFolder } from "./api";
 
+const { requireUser } = core.middleware;
+
 function invalidName(c: Context<AppEnv>): Response {
   return apiError(c, 400, "invalid_name", invalidFolderNameMessage);
 }
@@ -36,7 +39,7 @@ function invalidParentId(c: Context<AppEnv>): Response {
   return apiError(c, 400, "invalid_parent_id", invalidParentIdMessage);
 }
 
-export const createFolderBody = jsonBody<CreateFolderRequest, CreateFolderInput>((body, c) => {
+export const createFolderBody = jsonBody<CreateFolderRequest, CreateFolderInput, AppEnv>((body, c) => {
   const name = normalizeFolderName(body.name);
   if (name === null) return invalidName(c);
   const parentId = normalizeFolderRef(body.parent_id);
@@ -44,7 +47,7 @@ export const createFolderBody = jsonBody<CreateFolderRequest, CreateFolderInput>
   return { ok: true, value: { name, parentId: parentId.value ?? null } };
 });
 
-const updateFolderBody = jsonBody<UpdateFolderRequest, UpdateFolderInput>((body, c) => {
+const updateFolderBody = jsonBody<UpdateFolderRequest, UpdateFolderInput, AppEnv>((body, c) => {
   if (body.name === undefined && body.parent_id === undefined) {
     return apiError(c, 400, "empty_update", emptyFolderUpdateMessage);
   }
@@ -63,7 +66,7 @@ const updateFolderBody = jsonBody<UpdateFolderRequest, UpdateFolderInput>((body,
 });
 
 // Validated in the order space_id, parent_id.
-const moveFolderBody = jsonBody<MoveFolderRequest, MoveFolderInput>((body, c) => {
+const moveFolderBody = jsonBody<MoveFolderRequest, MoveFolderInput, AppEnv>((body, c) => {
   const spaceId = normalizeMoveSpaceId(body.space_id);
   if (spaceId === null) return apiError(c, 400, "invalid_space_id", invalidMoveSpaceIdMessage);
   const parentId = normalizeFolderRef(body.parent_id);

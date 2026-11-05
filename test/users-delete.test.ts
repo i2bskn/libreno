@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { attachmentKey } from "../src/attachments/service";
-import { deleteUser } from "../src/auth/users";
 import { attachments, folders, pageRevisions, pages, spaces, users, type SpaceRow, type UserRow } from "../src/db/schema";
 import {
   createUser,
@@ -261,7 +260,9 @@ describe("DELETE /api/v1/users/:id", () => {
   });
 });
 
-describe("deleteUser under a race", () => {
+// The statements of the delete batch run first, from the userDeleteStatements hook of src/core.ts. The data is changed
+// right before that batch, after the checks of DELETE /api/v1/users/:id.
+describe("DELETE /api/v1/users/:id under a race", () => {
   it("deletes nothing when the requester stops being an admin after the check", async () => {
     const target = await createUser({ email: "target@example.com", role: "admin", createdAt: T0 });
     await login(target.email);
@@ -270,7 +271,13 @@ describe("deleteUser under a race", () => {
       env.DB.prepare("UPDATE users SET role = 'member' WHERE id = ?").bind(admin.id).run(),
     );
 
-    expect(await deleteUser(raced, target.id)).toEqual({ ok: false, error: "last_admin" });
+    const res = await send(`/api/v1/users/${target.id}`, {
+      method: "DELETE",
+      cookies: adminCookies,
+      env: { DB: raced.$client },
+    });
+    expect(res.status).toBe(409);
+    expect(await errorCode(res)).toBe("last_admin");
 
     expect(await readUser(target.id)).toMatchObject({ role: "admin" });
     expect(await countSessions(target.id)).toBe(1);
@@ -292,7 +299,12 @@ describe("deleteUser under a race", () => {
       env.DB.prepare("UPDATE pages SET space_id = ? WHERE id = ?").bind(everyone.id, moved.id).run(),
     );
 
-    expect(await deleteUser(raced, member.id)).toEqual({ ok: true, attachmentIds: [stayingAttachment] });
+    const res = await send(`/api/v1/users/${member.id}`, {
+      method: "DELETE",
+      cookies: adminCookies,
+      env: { DB: raced.$client },
+    });
+    expect(res.status).toBe(204);
 
     expect(await readUser(member.id)).toBeUndefined();
     expect(await db.query.pages.findFirst({ where: eq(pages.id, moved.id) })).toMatchObject({
@@ -302,5 +314,7 @@ describe("deleteUser under a race", () => {
     expect(await countRows("attachments", [movedAttachment])).toBe(1);
     expect(await objectExists(movedAttachment)).toBe(true);
     expect(await countRows("pages", [staying.id])).toBe(0);
+    expect(await countRows("attachments", [stayingAttachment])).toBe(0);
+    expect(await objectExists(stayingAttachment)).toBe(false);
   });
 });

@@ -28,8 +28,7 @@ import {
   unsupportedTypeMessage,
   withAttachmentExtension,
 } from "../attachments/validation";
-import { describeError } from "../auth/middleware";
-import type { Db } from "../db/client";
+import { describeError, type Db } from "@i2bskn/workers-app-core";
 import { spaces, type UserRow } from "../db/schema";
 import { listFolders } from "../folders/queries";
 import { createFolder, deleteFolder, moveFolder, updateFolder } from "../folders/service";

@@ -1,9 +1,11 @@
 /** @jsxImportSource hono/jsx */
-import type { ConsentDescription } from "@cloudflare/workers-oauth-provider";
+import type { ConsentRenderProps } from "@i2bskn/workers-app-core";
 import { Layout } from "./layout";
 
+// The consent page of the MCP OAuth flow (consent.render in src/core.ts). description is not used: the text below
+// says what a client can do.
 // Every string in details may come from the client. JSX escapes them.
-export function ConsentPage(props: { details: ConsentDescription; handle: string; email: string }) {
+export function ConsentPage(props: ConsentRenderProps) {
   const { details } = props;
   return (
     <Layout title="接続の許可">

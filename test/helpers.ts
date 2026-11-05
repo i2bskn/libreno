@@ -1,17 +1,44 @@
-import { createExecutionContext } from "cloudflare:test";
+import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { hashPassword } from "../src/auth/password";
-import { createDb, type Db } from "../src/db/client";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { createDb, type Db } from "@i2bskn/workers-app-core";
+import {
+  createTestHelpers,
+  PASSWORD,
+  type RequestOptions as CoreRequestOptions,
+  type SessionCookies as CoreSessionCookies,
+} from "@i2bskn/workers-app-core/testing";
+import * as schema from "../src/db/schema";
 import { folders, pages, users, type FolderRow, type PageRow, type UserRow } from "../src/db/schema";
 import type { Bindings } from "../src/env";
 import { insertPersonalSpaceStatement } from "../src/spaces/queries";
 import worker from "../src/index";
 
+export { PASSWORD, TEST_JWT_SECRET, type SetCookie } from "@i2bskn/workers-app-core/testing";
+
 export const ORIGIN = "https://libreno.test";
 export const OIDC_ORIGIN = "https://wiki.example.com";
-export const PASSWORD = "correct horse battery";
 
-export const db = createDb(env.DB);
+// Login, users and requests through the Worker entry point (OAuthProvider), like production.
+const helpers = createTestHelpers({
+  worker,
+  env,
+  createExecutionContext,
+  waitOnExecutionContext,
+  brandId: "libreno",
+  origin: ORIGIN,
+});
+
+export const { send, setCookies, sessionCookies, login, d1With, countTable } = helpers;
+
+export type RequestOptions = CoreRequestOptions<Cloudflare.Env>;
+export type SessionCookies = CoreSessionCookies<"libreno">;
+
+// With the schema of libreno, for db.query.* in the tests.
+export const db = drizzle(env.DB, { schema });
+// Without a schema, like the Db of the app: for the src functions that take a Db.
+export const appDb = createDb(env.DB);
 
 export async function resetDb(): Promise<void> {
   await env.DB.batch([
@@ -42,110 +69,21 @@ export const oidcEnv: Partial<Bindings> = {
   OIDC_ISSUER: "https://idp.example.com",
   OIDC_CLIENT_ID: "libreno-client",
   OIDC_CLIENT_SECRET: "client-secret",
+  // Everyone the IdP signs in. Tests of the allowlist override it.
+  ALLOWED_EMAILS: "*",
 };
 
-export type RequestOptions = {
-  method?: string;
-  cookies?: Record<string, string>;
-  headers?: Record<string, string>;
-  form?: Record<string, string>;
-  json?: unknown;
-  // Sent as is, without a Content-Type.
-  body?: BodyInit;
-  env?: Partial<Bindings>;
-  // Passed to the Worker as is, without the per-request copy. Overrides env.
-  sharedEnv?: Cloudflare.Env;
-  // Origin header for non-GET requests. Defaults to the request origin; null omits it.
-  origin?: string | null;
-};
-
-export async function send(url: string, options: RequestOptions = {}): Promise<Response> {
-  const fullUrl = new URL(url, ORIGIN);
-  const method =
-    options.method ?? (options.form || options.json !== undefined || options.body !== undefined ? "POST" : "GET");
-  const headers = new Headers(options.headers);
-  const origin = options.origin === undefined ? fullUrl.origin : options.origin;
-  if (method !== "GET" && method !== "HEAD" && origin !== null) {
-    headers.set("Origin", origin);
-  }
-  if (options.cookies) {
-    headers.set(
-      "Cookie",
-      Object.entries(options.cookies)
-        .map(([k, v]) => `${k}=${v}`)
-        .join("; "),
-    );
-  }
-  let body: BodyInit | undefined;
-  if (options.form) {
-    body = new URLSearchParams(options.form);
-    headers.set("Content-Type", "application/x-www-form-urlencoded");
-  } else if (options.json !== undefined) {
-    body = typeof options.json === "string" ? options.json : JSON.stringify(options.json);
-    headers.set("Content-Type", "application/json");
-  } else if (options.body !== undefined) {
-    body = options.body;
-  }
-  const request = new Request(fullUrl, { method, headers, body, redirect: "manual" });
-  // Through the Worker entry point (OAuthProvider), like production.
-  return worker.fetch(request, options.sharedEnv ?? { ...env, ...options.env }, createExecutionContext());
-}
-
-export type SetCookie = { value: string; maxAge: number | null; raw: string };
-
-export function setCookies(res: Response): Record<string, SetCookie> {
-  const result: Record<string, SetCookie> = {};
-  for (const raw of res.headers.getSetCookie()) {
-    const [pair = "", ...attributes] = raw.split(";").map((s) => s.trim());
-    const index = pair.indexOf("=");
-    const maxAge = attributes.find((a) => a.toLowerCase().startsWith("max-age="));
-    result[pair.slice(0, index)] = {
-      value: pair.slice(index + 1),
-      maxAge: maxAge ? Number(maxAge.split("=")[1]) : null,
-      raw,
-    };
-  }
-  return result;
-}
-
-export type SessionCookies = { "__Host-libreno_at": string; "__Host-libreno_rt": string };
-
-export function sessionCookies(res: Response): SessionCookies {
-  const cookies = setCookies(res);
-  const at = cookies["__Host-libreno_at"]?.value;
-  const rt = cookies["__Host-libreno_rt"]?.value;
-  if (!at || !rt) throw new Error(`session cookies are missing: ${res.headers.getSetCookie().join(" | ")}`);
-  return { "__Host-libreno_at": at, "__Host-libreno_rt": rt };
-}
-
-export async function createUser(params: {
+// A user with their personal space, created in one batch like the userCreatedStatements hook of src/core.ts.
+export function createUser(params: {
   email: string;
   role?: "admin" | "member";
   password?: string | null;
   createdAt?: number;
 }): Promise<UserRow> {
-  const now = params.createdAt ?? Date.now();
-  const password = params.password === undefined ? PASSWORD : params.password;
-  const [user] = await db
-    .insert(users)
-    .values({
-      id: crypto.randomUUID(),
-      email: params.email,
-      role: params.role ?? "member",
-      passwordHash: password === null ? null : await hashPassword(password),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
-  if (!user) throw new Error("failed to create user");
-  await insertPersonalSpaceStatement(env.DB, user.id, now).run();
-  return user;
-}
-
-export async function login(email: string, password = PASSWORD): Promise<SessionCookies> {
-  const res = await send("/auth/login", { form: { email, password, next: "/" } });
-  if (res.status !== 303) throw new Error(`login failed: ${res.status}`);
-  return sessionCookies(res);
+  return helpers.createUser({
+    ...params,
+    userCreatedStatements: (d1, id, now) => [insertPersonalSpaceStatement(d1, id, now)],
+  });
 }
 
 export async function countSpaces(): Promise<number> {
@@ -167,22 +105,20 @@ export async function createUserWithoutSpace(params: {
   createdAt?: number;
   oidc?: { issuer: string; subject: string };
 }): Promise<UserRow> {
-  const now = params.createdAt ?? Date.now();
-  const [user] = await db
-    .insert(users)
-    .values({
-      id: crypto.randomUUID(),
-      email: params.email,
-      role: params.role ?? "member",
-      passwordHash: params.oidc ? null : await hashPassword(PASSWORD),
-      oidcIssuer: params.oidc?.issuer ?? null,
-      oidcSubject: params.oidc?.subject ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
+  const user = await helpers.createUser({
+    email: params.email,
+    role: params.role,
+    password: params.oidc ? null : PASSWORD,
+    createdAt: params.createdAt,
+  });
+  if (!params.oidc) return user;
+  const [linked] = await db
+    .update(users)
+    .set({ oidcIssuer: params.oidc.issuer, oidcSubject: params.oidc.subject })
+    .where(eq(users.id, user.id))
     .returning();
-  if (!user) throw new Error("failed to create user");
-  return user;
+  if (!linked) throw new Error("failed to link the user to OIDC");
+  return linked;
 }
 
 // Inserts a page directly, bypassing the API and its access checks.
@@ -258,7 +194,7 @@ export async function countFolders(): Promise<number> {
   return row?.count ?? 0;
 }
 
-// A Db whose D1 binding runs before() once, right before the first statement matching pattern runs (alone
+// A Db (without the schema, like the app's) whose D1 binding runs before() once, right before the first statement matching pattern runs (alone
 // or in a batch), as if another request changed the data between the checks of a service and its write.
 export function dbChangingBefore(pattern: RegExp, before: () => Promise<unknown>): Db {
   const real = env.DB;

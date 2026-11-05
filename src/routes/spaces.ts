@@ -10,11 +10,10 @@ import type {
   UpdateSpaceInput,
   UpdateSpaceRequest,
 } from "../api/types";
-import { clock } from "../clock";
+import { apiError, clock, isUniqueViolation } from "@i2bskn/workers-app-core";
 import { folders, pages, spaces } from "../db/schema";
 import type { AppEnv } from "../env";
-import { apiError, requireAdmin, requireUser } from "../auth/middleware";
-import { isUniqueViolation } from "../auth/users";
+import { core } from "../core";
 import { listFolders } from "../folders/queries";
 import { createFolder } from "../folders/service";
 import { folderNotFoundMessage, parentNotFoundOnCreateMessage } from "../folders/validation";
@@ -27,6 +26,8 @@ import { findSpaceById, spaceListOrder } from "../spaces/queries";
 import { jsonBody, toApiFolder, toApiPage, toApiPageSummary, toApiSpace, toApiTrashedPage } from "./api";
 import { createFolderBody } from "./folders";
 import { createPageBody } from "./pages";
+
+const { requireAdmin, requireUser } = core.middleware;
 
 const SPACE_NAME_MAX_LENGTH = 100;
 const SPACE_SORT_ORDER_MIN = -1000000;
@@ -62,7 +63,7 @@ function isCreatableKind(value: unknown): value is CreateSpaceInput["kind"] {
   return value === "everyone" || value === "admin";
 }
 
-const createSpaceBody = jsonBody<CreateSpaceRequest, CreateSpaceInput>((body, c) => {
+const createSpaceBody = jsonBody<CreateSpaceRequest, CreateSpaceInput, AppEnv>((body, c) => {
   if (!isCreatableKind(body.kind)) {
     return apiError(c, 400, "invalid_kind", "スペースの種類は everyone または admin です");
   }
@@ -72,7 +73,7 @@ const createSpaceBody = jsonBody<CreateSpaceRequest, CreateSpaceInput>((body, c)
 });
 
 // Validated in the order name, sort_order.
-const updateSpaceBody = jsonBody<UpdateSpaceRequest, UpdateSpaceInput>((body, c) => {
+const updateSpaceBody = jsonBody<UpdateSpaceRequest, UpdateSpaceInput, AppEnv>((body, c) => {
   if (body.name === undefined && body.sort_order === undefined) {
     return apiError(c, 400, "empty_update", emptySpaceUpdate);
   }

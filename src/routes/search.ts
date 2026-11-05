@@ -1,10 +1,13 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import type { SearchResult } from "../api/types";
 import type { AppEnv } from "../env";
-import { apiError, requireUser } from "../auth/middleware";
+import { apiError } from "@i2bskn/workers-app-core";
+import { core } from "../core";
 import { searchAccessiblePages } from "../pages/search";
 import { invalidSearchQueryMessage, normalizeSearchQuery } from "../pages/validation";
 import { toApiSearchHit } from "./api";
+
+const { requireUser } = core.middleware;
 
 type SearchQuery = { q: string; spaceId?: string };
 

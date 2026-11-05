@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import type { Page, PageRevision, PageRevisionList } from "../src/api/types";
-import { clock } from "../src/clock";
+import { clock } from "@i2bskn/workers-app-core";
 import { pageRevisions, pages, spaces, type PageRow, type SpaceRow, type UserRow } from "../src/db/schema";
 import {
   createUser,

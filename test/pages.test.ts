@@ -2,8 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import type { Page, PageList } from "../src/api/types";
-import { isUniqueViolation } from "../src/auth/users";
-import { clock } from "../src/clock";
+import { clock, isUniqueViolation } from "@i2bskn/workers-app-core";
 import { isForeignKeyViolation } from "../src/db/errors";
 import { pages, spaces, type SpaceRow, type UserRow } from "../src/db/schema";
 import {

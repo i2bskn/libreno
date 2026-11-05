@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, isNotNull, isNull, lte } from "drizzle-orm";
-import { clock } from "../clock";
-import type { Db } from "../db/client";
+import { clock, type Db } from "@i2bskn/workers-app-core";
 import { pages, type PageRow, type UserRow } from "../db/schema";
 import { canAccessSpace, type SpaceViewer } from "../spaces/access";
 import { isSpaceArchived, spaceNotArchived } from "../spaces/archive";

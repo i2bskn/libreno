@@ -57,9 +57,9 @@ export function ArchivedNotice() {
 }
 
 // The first item of the breadcrumbs: the archive screen for the screens of an archived space, where the space is
-// listed, and the spaces otherwise.
+// listed, and the home screen otherwise.
 export function BreadcrumbRoot({ archived }: { archived: boolean }) {
-  return <li>{archived ? <Link to="/archive">アーカイブ</Link> : <Link to="/">スペース</Link>}</li>;
+  return <li>{archived ? <Link to="/archive">アーカイブ</Link> : <Link to="/">ホーム</Link>}</li>;
 }
 
 // A small menu that opens below its summary. It closes after a link or button in it is chosen, on a click
@@ -117,7 +117,7 @@ export function NotFound({ message }: { message: string }) {
       <h1>{message}</h1>
       <p>
         <Link to="/" className="button">
-          スペースの一覧へ
+          ホームへ
         </Link>
       </p>
     </main>

@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import type { Db } from "../db/client";
+import type { Db } from "@i2bskn/workers-app-core";
 import { folders, type FolderRow, type SpaceRow } from "../db/schema";
 import { canAccessSpace, type SpaceViewer } from "../spaces/access";
 import { findSpaceById } from "../spaces/queries";

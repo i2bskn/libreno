@@ -1,4 +1,4 @@
-import type { Db } from "../db/client";
+import type { Db } from "@i2bskn/workers-app-core";
 import type { AttachmentRow, UserRow } from "../db/schema";
 import { createAttachment } from "./service";
 import {

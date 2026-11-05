@@ -204,7 +204,7 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
           {failure?.kind === "text" && <p role="alert">{failure.text}</p>}
           {failure?.kind === "spaceGone" && (
             <p role="alert">
-              このスペースは見つかりません。削除された可能性があります <Link to="/">スペース一覧へ</Link>
+              このスペースは見つかりません。削除された可能性があります <Link to="/">ホームへ</Link>
             </p>
           )}
         </form>
