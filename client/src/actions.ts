@@ -320,21 +320,20 @@ export async function createSpace(
   return { kind: "error", message: await responseErrorMessage(res) };
 }
 
-// Renames a space other than a personal space. Admins only. Never rejects.
-export async function renameSpace(client: ApiClient, spaceId: string, name: string): Promise<SpaceActionResult> {
-  return resourceActionResult(
-    await send(() => client.api.v1.spaces[":id"].$patch({ param: { id: spaceId }, json: { name } })),
-  );
-}
-
-// Changes the display order of a space other than a personal space. Admins only. Never rejects.
-export async function updateSpaceSortOrder(
+// Changes the name and the display order of a space other than a personal space in one request; the server
+// leaves a field that did not change as it is. Admins only. Never rejects.
+export async function updateSpace(
   client: ApiClient,
   spaceId: string,
-  sortOrder: number,
+  fields: { name: string; sortOrder: number },
 ): Promise<SpaceActionResult> {
   return resourceActionResult(
-    await send(() => client.api.v1.spaces[":id"].$patch({ param: { id: spaceId }, json: { sort_order: sortOrder } })),
+    await send(() =>
+      client.api.v1.spaces[":id"].$patch({
+        param: { id: spaceId },
+        json: { name: fields.name, sort_order: fields.sortOrder },
+      }),
+    ),
   );
 }
 

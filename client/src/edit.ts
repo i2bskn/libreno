@@ -80,3 +80,8 @@ export function insertMarkdown(
 export function markdownLinkToPage(title: string, id: string): string {
   return `[${escapeMarkdownText(title)}](/pages/${id})`;
 }
+
+// The full URL of a page, to paste outside of the wiki such as into a chat.
+export function pageUrl(origin: string, id: string): string {
+  return `${origin}/pages/${id}`;
+}

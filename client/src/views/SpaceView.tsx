@@ -41,12 +41,6 @@ export function SpaceView({ client, id, isAdmin }: { client: ApiClient; id: stri
       </nav>
       <div className="title-row">
         <h1>{name}</h1>
-        {isValidId(space.id) && (
-          <Link to={`/spaces/${space.id}/trash`} className="button trash-link">
-            <TrashIcon />
-            ゴミ箱
-          </Link>
-        )}
         {isAdmin && space.kind !== "personal" && isValidId(space.id) && (
           <SpaceActions client={client} space={space} onReload={reload} />
         )}
@@ -67,6 +61,16 @@ export function SpaceView({ client, id, isAdmin }: { client: ApiClient; id: stri
         pages={pages.filter((page) => page.folder_id === null)}
         emptyMessage="ページはまだありません"
       />
+      {/* Opened now and then to restore a page, so it is a quiet link below the list rather than a button next
+          to the title, where a trash icon reads as deleting the space. */}
+      {isValidId(space.id) && (
+        <p className="space-footer">
+          <Link to={`/spaces/${space.id}/trash`} className="button button-quiet">
+            <TrashIcon />
+            このスペースのゴミ箱
+          </Link>
+        </p>
+      )}
     </main>
   );
 }

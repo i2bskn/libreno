@@ -8,6 +8,7 @@ import {
   insertMarkdown,
   markdownLinkToPage,
   pageChanges,
+  pageUrl,
 } from "./edit";
 import { descendantIds } from "./folders";
 
@@ -168,5 +169,12 @@ describe("markdownLinkToPage", () => {
     ["*a* _b_", "\\*a\\* \\_b\\_"],
   ])("escapes %s", (title, escaped) => {
     expect(markdownLinkToPage(title, id)).toBe(`[${escaped}](/pages/${id})`);
+  });
+});
+
+describe("pageUrl", () => {
+  it("joins the origin and the path of the page", () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    expect(pageUrl("https://wiki.example", id)).toBe(`https://wiki.example/pages/${id}`);
   });
 });

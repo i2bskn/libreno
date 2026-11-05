@@ -1,13 +1,6 @@
 import { type FormEvent, useState } from "react";
 import type { Space } from "../../../src/api/types";
-import {
-  type SpaceActionResult,
-  archiveSpace,
-  deleteSpace,
-  renameSpace,
-  unarchiveSpace,
-  updateSpaceSortOrder,
-} from "../actions";
+import { type SpaceActionResult, archiveSpace, deleteSpace, unarchiveSpace, updateSpace } from "../actions";
 import { ArchiveIcon, EditIcon, MoreIcon, TrashIcon } from "../icons";
 import { Link } from "../Link";
 import type { ApiClient } from "../load";
@@ -15,7 +8,7 @@ import { navigate } from "../router";
 import { useSidebarActions } from "../sidebarStore";
 import { Menu } from "./common";
 
-type Operation = "rename" | "sortOrder" | "archive" | "unarchive" | "delete";
+type Operation = "edit" | "archive" | "unarchive" | "delete";
 
 type Failure =
   | { kind: "text"; text: string }
@@ -35,10 +28,10 @@ function parseSortOrder(value: string): number | null {
   return sortOrder;
 }
 
-// The buttons for admins to rename, reorder, archive (or unarchive) and delete a space other than a personal
-// space. The caller shows them
-// only to admins, for a space with a valid id. One operation is open at a time, independently of
-// FolderActions. The caller puts it in the title row: the menu sits next to the title and the form below it.
+// The menu for admins to edit (the name and the display order together), archive (or unarchive) and delete a
+// space other than a personal space. The caller shows it only to admins, for a space with a valid id. One
+// operation is open at a time, independently of FolderActions. The caller puts it in the title row: the menu
+// sits next to the title and the form below it.
 export function SpaceActions({ client, space, onReload }: { client: ApiClient; space: Space; onReload: () => void }) {
   const [open, setOpen] = useState<Operation | null>(null);
   const [sending, setSending] = useState(false);
@@ -53,8 +46,8 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
   function openOperation(operation: Operation) {
     setOpen(operation);
     setFailure(null);
-    setName(operation === "rename" ? (space.name ?? "") : "");
-    setSortOrder(operation === "sortOrder" ? String(space.sort_order) : "");
+    setName(operation === "edit" ? (space.name ?? "") : "");
+    setSortOrder(operation === "edit" ? String(space.sort_order) : "");
   }
 
   function close() {
@@ -100,16 +93,13 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     switch (open) {
-      case "rename":
-        void run("rename", () => renameSpace(client, spaceId, name));
-        return;
-      case "sortOrder": {
+      case "edit": {
         const value = parseSortOrder(sortOrder);
         if (value === null) {
           setFailure({ kind: "text", text: INVALID_SORT_ORDER_MESSAGE });
           return;
         }
-        void run("sortOrder", () => updateSpaceSortOrder(client, spaceId, value));
+        void run("edit", () => updateSpace(client, spaceId, { name, sortOrder: value }));
         return;
       }
       case "archive":
@@ -129,13 +119,9 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
   return (
     <>
       <Menu label="スペースの操作" className="more-menu" summary={<MoreIcon />}>
-        <button type="button" className="menu-item" onClick={() => openOperation("rename")} disabled={sending}>
+        <button type="button" className="menu-item" onClick={() => openOperation("edit")} disabled={sending}>
           <EditIcon />
-          {OPERATION_LABELS.rename}
-        </button>
-        <button type="button" className="menu-item" onClick={() => openOperation("sortOrder")} disabled={sending}>
-          <EditIcon />
-          {OPERATION_LABELS.sortOrder}
+          {OPERATION_LABELS.edit}
         </button>
         <hr className="menu-separator" />
         {archived ? (
@@ -161,39 +147,37 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
       </Menu>
       {open !== null && (
         <form className="folder-form" aria-label={OPERATION_LABELS[open]} onSubmit={onSubmit}>
-          {open === "rename" && (
-            <label>
-              新しい名前
-              {/* Opened from the menu to type the name: focused with the current name selected. */}
-              <input
-                type="text"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                onFocus={(event) => event.currentTarget.select()}
-                disabled={sending}
-                autoFocus
-              />
-            </label>
-          )}
-          {open === "sortOrder" && (
+          {open === "edit" && (
             <>
               <label>
-                表示順
-                {/* No inputMode: iOS's numeric keyboard has no minus sign. */}
+                名前
+                {/* Opened from the menu, most often to type the name: focused with the current name selected. */}
                 <input
-                  type="number"
-                  step="1"
-                  value={sortOrder}
-                  onChange={(event) => setSortOrder(event.target.value)}
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
                   onFocus={(event) => event.currentTarget.select()}
                   disabled={sending}
                   autoFocus
                 />
               </label>
+              <label>
+                表示順
+                {/* No inputMode: iOS's numeric keyboard has no minus sign. */}
+                <input
+                  type="number"
+                  className="sort-order-input"
+                  step="1"
+                  value={sortOrder}
+                  onChange={(event) => setSortOrder(event.target.value)}
+                  onFocus={(event) => event.currentTarget.select()}
+                  disabled={sending}
+                />
+              </label>
               {archived ? (
-                <p>小さい数字ほどアーカイブ一覧の上に表示されます。同じ数字のスペースは作成順です。</p>
+                <p className="form-hint">小さい数字ほどアーカイブ一覧の上に表示されます。同じ数字のスペースは作成順です。</p>
               ) : (
-                <p>
+                <p className="form-hint">
                   小さい数字ほどサイドバーの上に表示されます。同じ数字のスペースは作成順です。新しいスペースは 0
                   で作られます。個人スペースは常に一番下です。
                 </p>
@@ -230,16 +214,14 @@ export function SpaceActions({ client, space, onReload }: { client: ApiClient; s
 }
 
 const OPERATION_LABELS: Record<Operation, string> = {
-  rename: "スペースの名前を変更",
-  sortOrder: "表示順を変更",
+  edit: "スペースを編集",
   archive: "スペースをアーカイブ",
   unarchive: "アーカイブを解除",
   delete: "スペースを削除",
 };
 
 const SUBMIT_LABELS: Record<Operation, string> = {
-  rename: "保存",
-  sortOrder: "保存",
+  edit: "保存",
   archive: "アーカイブ",
   unarchive: "解除",
   delete: "削除",

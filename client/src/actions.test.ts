@@ -14,8 +14,6 @@ import {
   moveFolder,
   movePage,
   purgeTrashedPage,
-  renameSpace,
-  updateSpaceSortOrder,
   resetUserPassword,
   restoreRevision,
   restoreTrashedPage,
@@ -25,6 +23,7 @@ import {
   unarchiveSpace,
   updateFolder,
   updatePage,
+  updateSpace,
   uploadAttachment,
 } from "./actions";
 import { createApiClient, createApiFetch } from "./api";
@@ -618,69 +617,44 @@ describe("setTopPage", () => {
   });
 });
 
-describe("renameSpace", () => {
+describe("updateSpace", () => {
   const url = "/api/v1/spaces/s1";
+  const fields = { name: "a", sortOrder: 1 };
 
-  it("sends the name and is ok on 200", async () => {
+  it("sends the name and the sort_order in one PATCH and is ok on 200", async () => {
     const { client, fetch } = setup(() => Response.json({}), 401, url);
-    expect(await renameSpace(client, "s1", "新しい名前")).toEqual({ kind: "ok" });
+    expect(await updateSpace(client, "s1", { name: "新しい名前", sortOrder: -3 })).toEqual({ kind: "ok" });
+    expect(fetch).toHaveBeenCalledTimes(1);
     const init = fetch.mock.calls[0]?.[1];
     expect(init?.method).toBe("PATCH");
-    expect(JSON.parse(String(init?.body))).toEqual({ name: "新しい名前" });
+    expect(JSON.parse(String(init?.body))).toEqual({ name: "新しい名前", sort_order: -3 });
   });
 
   it("is not found on 404", async () => {
     const { client } = setup(apiError(404, "スペースが見つかりません"), 401, url);
-    expect(await renameSpace(client, "s1", "a")).toEqual({ kind: "notFound" });
+    expect(await updateSpace(client, "s1", fields)).toEqual({ kind: "notFound" });
   });
 
   it("is an error with the API message on 409", async () => {
     const message = "この名前のスペースはすでにあります（アーカイブされたスペースを含みます）";
     const { client } = setup(apiError(409, message), 401, url);
-    expect(await renameSpace(client, "s1", "a")).toEqual({ kind: "error", message });
-  });
-
-  it("is unknown when fetch rejects", async () => {
-    const { client } = setup(() => Promise.reject(new TypeError("Failed to fetch")), 401, url);
-    expect(await renameSpace(client, "s1", "a")).toEqual({ kind: "unknown" });
-  });
-
-  it("is redirecting when login is required", async () => {
-    const { client } = setup(apiError(401, "ログインしてください"), 401, url);
-    expect(await renameSpace(client, "s1", "a")).toEqual({ kind: "redirecting" });
-  });
-});
-
-describe("updateSpaceSortOrder", () => {
-  const url = "/api/v1/spaces/s1";
-
-  it("sends the sort_order and is ok on 200", async () => {
-    const { client, fetch } = setup(() => Response.json({}), 401, url);
-    expect(await updateSpaceSortOrder(client, "s1", -3)).toEqual({ kind: "ok" });
-    const init = fetch.mock.calls[0]?.[1];
-    expect(init?.method).toBe("PATCH");
-    expect(JSON.parse(String(init?.body))).toEqual({ sort_order: -3 });
-  });
-
-  it("is not found on 404", async () => {
-    const { client } = setup(apiError(404, "スペースが見つかりません"), 401, url);
-    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "notFound" });
+    expect(await updateSpace(client, "s1", fields)).toEqual({ kind: "error", message });
   });
 
   it("is an error with the API message on 400", async () => {
     const message = "表示順は -1000000 以上 1000000 以下の整数にしてください";
     const { client } = setup(apiError(400, message), 401, url);
-    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "error", message });
+    expect(await updateSpace(client, "s1", fields)).toEqual({ kind: "error", message });
   });
 
   it("is unknown when fetch rejects", async () => {
     const { client } = setup(() => Promise.reject(new TypeError("Failed to fetch")), 401, url);
-    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "unknown" });
+    expect(await updateSpace(client, "s1", fields)).toEqual({ kind: "unknown" });
   });
 
   it("is redirecting when login is required", async () => {
     const { client } = setup(apiError(401, "ログインしてください"), 401, url);
-    expect(await updateSpaceSortOrder(client, "s1", 1)).toEqual({ kind: "redirecting" });
+    expect(await updateSpace(client, "s1", fields)).toEqual({ kind: "redirecting" });
   });
 });
 

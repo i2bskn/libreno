@@ -84,6 +84,34 @@ export function LinkIcon() {
   );
 }
 
+export function CopyIcon() {
+  return (
+    <Icon>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" />
+      <path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5" />
+    </Icon>
+  );
+}
+
+// The Markdown mark: an "M" and a down arrow in a frame.
+export function MarkdownIcon() {
+  return (
+    <Icon>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+      <path d="M6.5 15V9l2.5 3 2.5-3v6" />
+      <path d="M16.5 9v6m-2-2 2 2 2-2" />
+    </Icon>
+  );
+}
+
+export function CheckIcon() {
+  return (
+    <Icon>
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </Icon>
+  );
+}
+
 export function MoreIcon() {
   return (
     <Icon>

@@ -1,10 +1,22 @@
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Page, PageSummary, Space } from "../../../src/api/types";
 import { movePage, setTopPage, trashPage } from "../actions";
-import { markdownLinkToPage } from "../edit";
+import { markdownLinkToPage, pageUrl } from "../edit";
 import { formatDateTime, spaceDisplayName, widerVisibilityWarning } from "../format";
 import { folderPath } from "../folders";
-import { EditIcon, HistoryIcon, LinkIcon, MoreIcon, MoveIcon, PageIcon, PinIcon, TrashIcon } from "../icons";
+import {
+  CheckIcon,
+  CopyIcon,
+  EditIcon,
+  HistoryIcon,
+  LinkIcon,
+  MarkdownIcon,
+  MoreIcon,
+  MoveIcon,
+  PageIcon,
+  PinIcon,
+  TrashIcon,
+} from "../icons";
 import { Link } from "../Link";
 import { type ApiClient, type ListResult, loadBacklinks, loadPageView, loadTopPage, useView } from "../load";
 import { Markdown } from "../Markdown";
@@ -50,10 +62,17 @@ export function PageView({
     })),
   );
 
-  // The result of copying the link is about the page it was copied from.
+  // The result of copying is about the page it was copied from.
   useEffect(() => {
     setCopy({ kind: "idle" });
   }, [id]);
+
+  // The check mark and the message go away after a while; a failure stays until the next copy.
+  useEffect(() => {
+    if (copy.kind !== "copied") return;
+    const timer = setTimeout(() => setCopy({ kind: "idle" }), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copy]);
 
   if (state.kind !== "ready") {
     return <ViewStatus state={state} notFoundMessage="ページが見つかりません" onReload={reload} />;
@@ -80,7 +99,10 @@ export function PageView({
         </ol>
       </nav>
       <header className="page-header">
-        <h1 className="page-heading">{page.title}</h1>
+        <div className="page-title">
+          <h1 className="page-heading">{page.title}</h1>
+          <CopyButton target={{ what: "title", text: page.title }} copy={copy} setCopy={setCopy} className="title-copy-button" />
+        </div>
         <p className="page-info">
           {space && <SpaceKindBadge kind={space.kind} />}
           <span>
@@ -96,14 +118,22 @@ export function PageView({
                   編集
                 </Link>
               )}
-              <Link to={`/pages/${page.id}/history`} className="button">
+              <Link to={`/pages/${page.id}/history`} className="button toolbar-icon-button" title="履歴">
                 <HistoryIcon />
-                履歴
+                <span className="sr-only">履歴</span>
               </Link>
-              <button type="button" onClick={() => void copyLink(markdownLinkToPage(page.title, page.id), setCopy)}>
-                <LinkIcon />
-                リンクをコピー
-              </button>
+              <CopyButton
+                target={{ what: "url", text: pageUrl(origin, page.id) }}
+                copy={copy}
+                setCopy={setCopy}
+                className="toolbar-icon-button"
+              />
+              <CopyButton
+                target={{ what: "link", text: markdownLinkToPage(page.title, page.id) }}
+                copy={copy}
+                setCopy={setCopy}
+                className="toolbar-icon-button"
+              />
             </>
           )}
           {!archived && (
@@ -127,13 +157,13 @@ export function PageView({
           )}
           {copy.kind === "copied" && (
             <span className="toolbar-status" role="status">
-              コピーしました
+              {COPY_LABELS[copy.what]}をコピーしました
             </span>
           )}
         </div>
       </header>
       {archived && <ArchivedNotice />}
-      {copy.kind === "failed" && <CopyFallback markdown={copy.markdown} />}
+      {copy.kind === "failed" && <CopyFallback target={copy.target} />}
       {moving && !archived && (
         <MovePage
           client={client}
@@ -155,39 +185,77 @@ export function PageView({
   );
 }
 
-type CopyState = { kind: "idle" } | { kind: "copied" } | { kind: "failed"; markdown: string };
+// What is copied: the title of the page, its full URL, or the Markdown link to it.
+type CopyTarget = { what: "title" | "url" | "link"; text: string };
 
-// Writes the Markdown link to the clipboard. The clipboard API is missing outside secure contexts and can
-// reject, for example when the permission is denied; then the link is shown to be copied by hand.
-async function copyLink(markdown: string, setCopy: (state: CopyState) => void): Promise<void> {
+type CopyState = { kind: "idle" } | { kind: "copied"; what: CopyTarget["what"] } | { kind: "failed"; target: CopyTarget };
+
+const COPY_LABELS: Record<CopyTarget["what"], string> = { title: "タイトル", url: "URL", link: "Markdownのリンク" };
+
+const COPY_ICONS: Record<CopyTarget["what"], () => ReactNode> = { title: CopyIcon, url: LinkIcon, link: MarkdownIcon };
+
+const FALLBACK_LABELS: Record<CopyTarget["what"], string> = {
+  title: "ページのタイトル",
+  url: "ページのURL",
+  link: "ページへのリンク",
+};
+
+// How long the check mark and the message stay after copying.
+const COPIED_MS = 2000;
+
+// A button that shows only an icon; its name is given by aria-label and shown as a tooltip by title. The icon
+// turns into a check mark for a while after the text is copied.
+function CopyButton({
+  target,
+  copy,
+  setCopy,
+  className,
+}: {
+  target: CopyTarget;
+  copy: CopyState;
+  setCopy: (state: CopyState) => void;
+  className: string;
+}) {
+  const label = `${COPY_LABELS[target.what]}をコピー`;
+  const Icon = copy.kind === "copied" && copy.what === target.what ? CheckIcon : COPY_ICONS[target.what];
+  return (
+    <button type="button" className={className} aria-label={label} title={label} onClick={() => void copyText(target, setCopy)}>
+      <Icon />
+    </button>
+  );
+}
+
+// Writes the text to the clipboard. The clipboard API is missing outside secure contexts and can reject, for
+// example when the permission is denied; then the text is shown to be copied by hand.
+async function copyText(target: CopyTarget, setCopy: (state: CopyState) => void): Promise<void> {
   // The result of the previous click is cleared.
   setCopy({ kind: "idle" });
   try {
     if (typeof navigator.clipboard?.writeText !== "function") throw new Error("no clipboard API");
-    await navigator.clipboard.writeText(markdown);
-    setCopy({ kind: "copied" });
+    await navigator.clipboard.writeText(target.text);
+    setCopy({ kind: "copied", what: target.what });
   } catch {
-    setCopy({ kind: "failed", markdown });
+    setCopy({ kind: "failed", target });
   }
 }
 
-// The link in a read-only input, selected so that it can be copied with the keyboard or the menu.
-function CopyFallback({ markdown }: { markdown: string }) {
+// The text in a read-only input, selected so that it can be copied with the keyboard or the menu.
+function CopyFallback({ target }: { target: CopyTarget }) {
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     input.current?.select();
-  }, [markdown]);
+  }, [target]);
 
   return (
     <div className="copy-fallback">
-      <p role="alert">コピーできませんでした。選択してコピーしてください</p>
+      <p role="alert">{COPY_LABELS[target.what]}をコピーできませんでした。選択してコピーしてください</p>
       <input
         ref={input}
         type="text"
         readOnly
-        value={markdown}
-        aria-label="ページへのリンク"
+        value={target.text}
+        aria-label={FALLBACK_LABELS[target.what]}
         onFocus={(event) => event.currentTarget.select()}
       />
     </div>
