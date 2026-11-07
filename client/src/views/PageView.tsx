@@ -118,10 +118,6 @@ export function PageView({
                   編集
                 </Link>
               )}
-              <Link to={`/pages/${page.id}/history`} className="button toolbar-icon-button" title="履歴">
-                <HistoryIcon />
-                <span className="sr-only">履歴</span>
-              </Link>
               <CopyButton
                 target={{ what: "url", text: pageUrl(origin, page.id) }}
                 copy={copy}
@@ -136,25 +132,25 @@ export function PageView({
               />
             </>
           )}
-          {!archived && (
-            <PageMenu
-              client={client}
-              page={page}
-              // Only pages in an everyone space can be shown at the top; the server checks it again.
-              canSetTopPage={isAdmin && space?.kind === "everyone"}
-              moving={moving}
-              confirmingDelete={confirmingDelete}
-              // One panel at a time: moving and deleting do not stay open together.
-              onMove={() => {
-                setConfirmingDelete(false);
-                setMoving(true);
-              }}
-              onDelete={() => {
-                setMoving(false);
-                setConfirmingDelete(true);
-              }}
-            />
-          )}
+          {/* The menu stays on an archived page for its history; the items that change the page are left out. */}
+          <PageMenu
+            client={client}
+            page={page}
+            archived={archived}
+            // Only pages in an everyone space can be shown at the top; the server checks it again.
+            canSetTopPage={!archived && isAdmin && space?.kind === "everyone"}
+            moving={moving}
+            confirmingDelete={confirmingDelete}
+            // One panel at a time: moving and deleting do not stay open together.
+            onMove={() => {
+              setConfirmingDelete(false);
+              setMoving(true);
+            }}
+            onDelete={() => {
+              setMoving(false);
+              setConfirmingDelete(true);
+            }}
+          />
           {copy.kind === "copied" && (
             <span className="toolbar-status" role="status">
               {COPY_LABELS[copy.what]}をコピーしました
@@ -437,13 +433,14 @@ type TopPageState =
   // The move to the login page has started; the button stays disabled.
   | { kind: "redirecting" };
 
-// The "…" menu of the page toolbar: moving, deleting and, for admins, showing the page at the top of the home
-// screen. Whether the page is at the top is told by loading the current top page; the item is shown only after it
+// The "…" menu of the page toolbar: moving, the history, deleting and, for admins, showing the page at the top of
+// the home screen. On an archived page it holds only the history. Whether the page is at the top is told by loading the current top page; the item is shown only after it
 // is loaded. It loads the whole top page only to compare the ID. The result of that item is shown next to the
 // menu, which closes when an item is chosen.
 function PageMenu({
   client,
   page,
+  archived,
   canSetTopPage,
   moving,
   confirmingDelete,
@@ -452,6 +449,7 @@ function PageMenu({
 }: {
   client: ApiClient;
   page: Page;
+  archived: boolean;
   canSetTopPage: boolean;
   moving: boolean;
   confirmingDelete: boolean;
@@ -499,10 +497,18 @@ function PageMenu({
   return (
     <>
       <Menu label="ページの操作" className="more-menu" summary={<MoreIcon />}>
-        <button type="button" className="menu-item" onClick={onMove} disabled={moving}>
-          <MoveIcon />
-          移動
-        </button>
+        {!archived && (
+          <button type="button" className="menu-item" onClick={onMove} disabled={moving}>
+            <MoveIcon />
+            移動
+          </button>
+        )}
+        {isValidId(page.id) && (
+          <Link to={`/pages/${page.id}/history`} className="menu-item">
+            <HistoryIcon />
+            履歴
+          </Link>
+        )}
         {canSetTopPage && current.kind === "ok" && (
           <button
             type="button"
@@ -514,11 +520,15 @@ function PageMenu({
             {isTop ? "トップから外す" : "トップに表示"}
           </button>
         )}
-        <hr className="menu-separator" />
-        <button type="button" className="menu-item menu-item-danger" onClick={onDelete} disabled={confirmingDelete}>
-          <TrashIcon />
-          削除
-        </button>
+        {!archived && (
+          <>
+            <hr className="menu-separator" />
+            <button type="button" className="menu-item menu-item-danger" onClick={onDelete} disabled={confirmingDelete}>
+              <TrashIcon />
+              削除
+            </button>
+          </>
+        )}
       </Menu>
       {state.kind === "done" && (
         <span className="toolbar-status" role="status">
