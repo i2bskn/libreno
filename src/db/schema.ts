@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -14,12 +15,13 @@ import { users } from "@i2bskn/workers-app-core/schema";
 // imported for the references below (a re-export creates no local binding).
 export { users, sessions, type UserRow, type SessionRow } from "@i2bskn/workers-app-core/schema";
 
-// Pages belong to one space, and access is decided by the space kind alone.
+// Pages belong to one space, and access is decided by the space kind, the viewer's role, the space owner and,
+// for members spaces, the rows of space_members (see spaces/access.ts).
 export const spaces = sqliteTable(
   "spaces",
   {
     id: text("id").primaryKey(),
-    kind: text("kind", { enum: ["everyone", "admin", "personal"] }).notNull(),
+    kind: text("kind", { enum: ["everyone", "admin", "members", "personal"] }).notNull(),
     // NULL only for personal spaces; clients decide their display name.
     name: text("name"),
     // Set only for personal spaces. Not deleted in cascade.
@@ -34,14 +36,31 @@ export const spaces = sqliteTable(
   (t) => [
     // One personal space per user. NULLs do not conflict.
     uniqueIndex("spaces_owner_user_id_unique").on(t.ownerUserId),
-    // Names are unique across everyone and admin spaces, compared exactly.
+    // Names are unique across the spaces other than personal ones, compared exactly.
     uniqueIndex("spaces_name_unique").on(t.name),
-    check("spaces_kind_check", sql`${t.kind} IN ('everyone', 'admin', 'personal')`),
+    check("spaces_kind_check", sql`${t.kind} IN ('everyone', 'admin', 'members', 'personal')`),
     check(
       "spaces_personal_check",
       sql`(${t.kind} = 'personal') = (${t.ownerUserId} IS NOT NULL) AND (${t.kind} = 'personal') = (${t.name} IS NULL)`,
     ),
   ],
+);
+
+// The users chosen by an admin to see a members space, besides all admins. Rows of spaces of other kinds are
+// never created and never used for access. Deleted in cascade with the space or the user, so that deleting a
+// user needs no statement of its own.
+export const spaceMembers = sqliteTable(
+  "space_members",
+  {
+    spaceId: text("space_id")
+      .notNull()
+      .references(() => spaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.spaceId, t.userId] }), index("space_members_user_id_idx").on(t.userId)],
 );
 
 // Folders organize pages inside one space and carry no permissions of their own.
@@ -157,6 +176,7 @@ export const siteSettings = sqliteTable(
 );
 
 export type SpaceRow = typeof spaces.$inferSelect;
+export type SpaceMemberRow = typeof spaceMembers.$inferSelect;
 export type FolderRow = typeof folders.$inferSelect;
 export type PageRow = typeof pages.$inferSelect;
 export type PageRevisionRow = typeof pageRevisions.$inferSelect;

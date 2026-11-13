@@ -1,8 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@i2bskn/workers-app-core";
 import { pages, spaces } from "../db/schema";
-import { accessibleSpacesWhere, canAccessSpace, type SpaceViewer } from "../spaces/access";
-import { findSpaceById } from "../spaces/queries";
+import { accessibleSpacesWhere, findAccessibleSpace, type SpaceViewer } from "../spaces/access";
 import type { PageSummaryRow } from "./queries";
 
 export const SEARCH_LIMIT = 50;
@@ -82,7 +81,7 @@ export async function searchAccessiblePages(
   if (spaceId === undefined || spaceId === "") {
     return { ok: true, result: await searchPages(db, viewer, query) };
   }
-  const space = await findSpaceById(db, spaceId);
-  if (!space || !canAccessSpace(viewer, space)) return { ok: false, error: "space_not_found" };
+  const space = await findAccessibleSpace(db, viewer, spaceId);
+  if (!space) return { ok: false, error: "space_not_found" };
   return { ok: true, result: await searchPages(db, viewer, query, space.id) };
 }

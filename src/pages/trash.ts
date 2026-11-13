@@ -1,9 +1,8 @@
 import { and, asc, desc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { clock, type Db } from "@i2bskn/workers-app-core";
 import { pages, type PageRow, type UserRow } from "../db/schema";
-import { canAccessSpace, type SpaceViewer } from "../spaces/access";
+import { findAccessibleSpace, type SpaceViewer } from "../spaces/access";
 import { isSpaceArchived, spaceNotArchived } from "../spaces/archive";
-import { findSpaceById } from "../spaces/queries";
 import { findAccessiblePageIncludingTrash, findPageById } from "./queries";
 
 // Shared by the REST API and the MCP tools. Deleting a page moves it to the trash of its space, where it
@@ -52,8 +51,8 @@ export type ListTrashResult = { ok: true; pages: TrashedPageRow[] } | { ok: fals
 // Lists the pages in the trash of the space, most recently deleted first, without reading their bodies.
 // Spaces the viewer cannot access are reported as missing so that their existence is not revealed.
 export async function listTrash(db: Db, viewer: SpaceViewer, spaceId: string): Promise<ListTrashResult> {
-  const space = await findSpaceById(db, spaceId);
-  if (!space || !canAccessSpace(viewer, space)) return { ok: false, error: "space_not_found" };
+  const space = await findAccessibleSpace(db, viewer, spaceId);
+  if (!space) return { ok: false, error: "space_not_found" };
   const rows = await db
     .select({
       id: pages.id,

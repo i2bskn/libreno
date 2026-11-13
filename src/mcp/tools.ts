@@ -79,9 +79,9 @@ import {
   toApiSpace,
   toApiTrashedPage,
 } from "../routes/api";
-import { accessibleSpacesWhere, canAccessSpace, type VisibilityNotAcknowledged } from "../spaces/access";
+import { accessibleSpacesWhere, findAccessibleSpace, type VisibilityNotAcknowledged } from "../spaces/access";
 import { spaceArchivedMessage } from "../spaces/archive";
-import { findSpaceById, spaceListOrder } from "../spaces/queries";
+import { spaceListOrder } from "../spaces/queries";
 
 export type ToolDeps = { db: Db; user: UserRow; attachments: R2Bucket };
 
@@ -110,15 +110,26 @@ async function guard(tool: string, run: () => Promise<CallToolResult>): Promise<
 const SPACE_KIND_NAMES: Record<SpaceKind, string> = {
   personal: "個人（本人のみ）",
   admin: "管理者のみ",
+  members: "メンバー指定（選ばれたユーザーと管理者）",
   everyone: "全員",
 };
 
 function visibilityNotAcknowledgedMessage(result: VisibilityNotAcknowledged): string {
+  const rest =
+    "ページの過去の版（履歴）と添付ファイルも見られるようになります。" +
+    "利用者に確認してから acknowledge_wider_visibility: true を付けて呼んでください";
+  // Between two members spaces the members are not compared, so the message says they differ rather than more.
+  if (result.from === "members" && result.to === "members") {
+    return (
+      `移動先のスペース「${result.destName}」（メンバー指定）は、` +
+      "移動元のメンバー指定スペースとは見られる人が違います。" +
+      rest
+    );
+  }
   return (
     `移動先のスペース「${result.destName}」（${SPACE_KIND_NAMES[result.to]}）は、` +
     `移動元（${SPACE_KIND_NAMES[result.from]}）より多くの人が見られます。` +
-    "ページの過去の版（履歴）と添付ファイルも見られるようになります。" +
-    "利用者に確認してから acknowledge_wider_visibility: true を付けて呼んでください"
+    rest
   );
 }
 
@@ -133,7 +144,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
       description:
         "List the spaces the signed-in user can access, by sort_order ascending (creation order for equal values), " +
         "with the personal space last. Each space has an id, a kind, a name and a sort_order. " +
-        "kind is 'everyone' (all users), 'admin' (admins only) or 'personal'. " +
+        "kind is 'everyone' (all users), 'admin' (admins only), 'members' (the users chosen by an admin, and all " +
+        "admins) or 'personal'. " +
         "The personal space (kind=personal, name=null) belongs to the calling user and is private to them. " +
         "archived_at is the time the space was archived, or null if it is not archived. " +
         "Archived spaces are read only and are listed only with archived=true; their pages can still be read. " +
@@ -176,9 +188,9 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
     },
     ({ space_id }) =>
       guard("list_pages", async () => {
-        const space = await findSpaceById(db, space_id);
+        const space = await findAccessibleSpace(db, user, space_id);
         // Spaces the user cannot access are reported as missing so that their existence is not revealed.
-        if (!space || !canAccessSpace(user, space)) return errorResult("スペースが見つかりません");
+        if (!space) return errorResult("スペースが見つかりません");
         const rows = await listPageSummaries(db, space.id);
         const body: PageList = { pages: rows.map(toApiPageSummary) };
         return jsonResult(body);
@@ -242,7 +254,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         "Create a page in a space, optionally in a folder of that space. The body is Markdown. " +
         "Returns the new page's metadata (id, version, ...) without the body. " +
         "A page in the personal space (kind=personal) is visible only to the calling user; " +
-        "a page in an 'everyone' space is visible to all users. " +
+        "a page in an 'everyone' space is visible to all users; " +
+        "a page in a 'members' space is visible to the users chosen by an admin and to all admins. " +
         "Link to other pages with [title](/pages/{page_id}).",
       inputSchema: {
         space_id: z.string().describe("The id of a space returned by list_spaces"),
@@ -362,7 +375,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         "Move a page to another space (or to another folder of its space). The user needs access to both spaces. " +
         "Who can see the page changes to the destination space's kind (see list_spaces), and the earlier " +
         "versions of the page (revisions) move with it and become visible there too. " +
-        "Moving to a space that more people can see (personal to admin or everyone, admin to everyone) fails " +
+        "Moving to a space of a kind that more people can see (personal < admin < members < everyone), or from one " +
+        "members space to another (their members may differ), fails " +
         "unless acknowledge_wider_visibility is true: ask the user to confirm first, then call again with it. " +
         "Moving to a space that fewer people can see hides the page from the other users. " +
         "version must be the current version from get_page; the version is incremented. " +
@@ -656,9 +670,9 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
     },
     ({ space_id }) =>
       guard("list_folders", async () => {
-        const space = await findSpaceById(db, space_id);
+        const space = await findAccessibleSpace(db, user, space_id);
         // Spaces the user cannot access are reported as missing so that their existence is not revealed.
-        if (!space || !canAccessSpace(user, space)) return errorResult("スペースが見つかりません");
+        if (!space) return errorResult("スペースが見つかりません");
         const rows = await listFolders(db, space.id);
         const body: FolderList = { folders: rows.map(toApiFolder) };
         return jsonResult(body);
@@ -764,7 +778,8 @@ export function registerTools(server: McpServer, { db, user, attachments }: Tool
         "and pages, including pages in the trash, keep their place inside it. The user needs access to both spaces. " +
         "Who can see the contents changes to the destination space's kind (see list_spaces), and the earlier " +
         "versions of the pages (revisions) move with them and become visible there too. " +
-        "Moving to a space that more people can see (personal to admin or everyone, admin to everyone) fails " +
+        "Moving to a space of a kind that more people can see (personal < admin < members < everyone), or from one " +
+        "members space to another (their members may differ), fails " +
         "unless acknowledge_wider_visibility is true: ask the user to confirm first, then call again with it. " +
         "Moving to a space that fewer people can see hides the contents from the other users. " +
         "A folder cannot be moved into itself or one of its subfolders. Returns the folder.",

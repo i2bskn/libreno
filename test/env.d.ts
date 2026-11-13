@@ -5,6 +5,8 @@ declare global {
   namespace Cloudflare {
     interface Env extends Bindings {
       TEST_MIGRATIONS: D1Migration[];
+      // Used only by test/migration-0011.test.ts.
+      MIGRATION_DB: D1Database;
     }
   }
 }

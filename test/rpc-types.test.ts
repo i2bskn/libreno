@@ -20,9 +20,11 @@ import type {
   RestorePageRevisionRequest,
   SearchHit,
   SearchResult,
+  SetSpaceMembersRequest,
   SetTopPageRequest,
   Space,
   SpaceList,
+  SpaceMembers,
   TopPage,
   TrashedPage,
   TrashList,
@@ -39,6 +41,7 @@ const client = hc<AppType>(ORIGIN);
 
 type CreateUserJson = InferRequestType<typeof client.api.v1.users.$post>["json"];
 type CreateSpaceJson = InferRequestType<typeof client.api.v1.spaces.$post>["json"];
+type SetSpaceMembersJson = InferRequestType<(typeof client.api.v1.spaces)[":id"]["members"]["$put"]>["json"];
 type CreatePageJson = InferRequestType<(typeof client.api.v1.spaces)[":id"]["pages"]["$post"]>["json"];
 type UpdatePageJson = InferRequestType<(typeof client.api.v1.pages)[":id"]["$patch"]>["json"];
 type CreateFolderJson = InferRequestType<(typeof client.api.v1.spaces)[":id"]["folders"]["$post"]>["json"];
@@ -65,10 +68,25 @@ describe("AppType", () => {
   it("types the request body of POST /api/v1/spaces", () => {
     expectTypeOf<CreateSpaceJson>().toEqualTypeOf<CreateSpaceRequest>();
     const everyone: CreateSpaceJson = { kind: "everyone", name: "Everyone" };
+    const members: CreateSpaceJson = { kind: "members", name: "Team", member_ids: ["user-1"] };
     // @ts-expect-error personal spaces cannot be created through the API
     const personal: CreateSpaceJson = { kind: "personal", name: "Mine" };
+    // @ts-expect-error member_ids is a list of user IDs
+    const oneMember: CreateSpaceJson = { kind: "members", name: "Team", member_ids: "user-1" };
     void everyone;
+    void members;
     void personal;
+    void oneMember;
+  });
+
+  it("types the members of a space", () => {
+    expectTypeOf<SetSpaceMembersJson>().toEqualTypeOf<SetSpaceMembersRequest>();
+    expectTypeOf<
+      InferResponseType<(typeof client.api.v1.spaces)[":id"]["members"]["$get"], 200>
+    >().toEqualTypeOf<SpaceMembers>();
+    expectTypeOf<
+      InferResponseType<(typeof client.api.v1.spaces)[":id"]["members"]["$put"], 200>
+    >().toEqualTypeOf<SpaceMembers>();
   });
 
   it("types the request bodies of page creation and update", () => {

@@ -12,6 +12,9 @@ export default defineConfig(async () => {
             cloudflareTest({
               wrangler: { configPath: "./wrangler.jsonc" },
               miniflare: {
+                // An empty D1 for the test of migration 0011 (test/migration-0011.test.ts), which applies the
+                // migrations itself. setup.ts applies nothing to it.
+                d1Databases: ["MIGRATION_DB"],
                 bindings: {
                   TEST_MIGRATIONS: migrations,
                   AUTH_MODE: "password",

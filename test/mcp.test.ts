@@ -21,6 +21,7 @@ import {
   folders,
   pageRevisions,
   pages,
+  spaceMembers,
   spaces,
   users,
   type FolderRow,
@@ -186,7 +187,7 @@ function expectToolError(result: ToolResult, message: string) {
   expect(result.content).toEqual([{ type: "text", text: message }]);
 }
 
-async function insertSpace(kind: "everyone" | "admin", name: string): Promise<SpaceRow> {
+async function insertSpace(kind: "everyone" | "admin" | "members", name: string): Promise<SpaceRow> {
   const now = Date.now();
   const [space] = await db
     .insert(spaces)
@@ -384,6 +385,26 @@ describe("MCP", () => {
     await db.update(users).set({ role: "member" }).where(eq(users.id, admin.id));
     const after = toolJson<SpaceList>(await callTool(access_token, "list_spaces"));
     expect(after.spaces.map((s) => s.id)).not.toContain(adminSpace.id);
+  });
+
+  it("hides a members space and its pages as soon as the user is removed from the members", async () => {
+    const team = await insertSpace("members", "Team");
+    await db.insert(spaceMembers).values({ spaceId: team.id, userId: member.id, createdAt: Date.now() });
+    const page = await insertPage({ spaceId: team.id, title: "Team notes", body: "the plan" });
+    const { access_token } = await authorizeClient(memberCookies);
+    const listIds = async () =>
+      toolJson<SpaceList>(await callTool(access_token, "list_spaces")).spaces.map((s) => s.id);
+    const searchIds = async () =>
+      toolJson<SearchResult>(await callTool(access_token, "search_pages", { query: "plan" })).hits.map((h) => h.id);
+
+    expect(await listIds()).toContain(team.id);
+    expect(toolJson<Page>(await callTool(access_token, "get_page", { page_id: page.id })).id).toBe(page.id);
+    expect(await searchIds()).toEqual([page.id]);
+
+    await db.delete(spaceMembers).where(eq(spaceMembers.spaceId, team.id));
+    expect(await listIds()).not.toContain(team.id);
+    expectToolError(await callTool(access_token, "get_page", { page_id: page.id }), "ページが見つかりません");
+    expect(await searchIds()).toEqual([]);
   });
 
   it("returns 401 once the user is deleted", async () => {
@@ -1437,6 +1458,91 @@ describe("MCP move tools", () => {
         "space_id は移動先のスペースの id で指定してください",
       );
       expect(await readPage(page.id)).toEqual(page);
+    });
+  });
+
+  describe("members spaces", () => {
+    let adminToken: string;
+    let team: SpaceRow;
+    let otherTeam: SpaceRow;
+
+    beforeEach(async () => {
+      adminToken = (await authorizeClient(adminCookies)).access_token;
+      team = await insertSpace("members", "Team");
+      otherTeam = await insertSpace("members", "Other team");
+    });
+
+    function betweenMembersMessage(destName: string): string {
+      return (
+        `移動先のスペース「${destName}」（メンバー指定）は、移動元のメンバー指定スペースとは見られる人が違います。` +
+        "ページの過去の版（履歴）と添付ファイルも見られるようになります。" +
+        "利用者に確認してから acknowledge_wider_visibility: true を付けて呼んでください"
+      );
+    }
+
+    it("needs the acknowledgement to move a page from an admin space to a members space", async () => {
+      const page = await insertPage({ spaceId: adminSpace.id });
+      expectToolError(
+        await callTool(adminToken, "move_page", { page_id: page.id, version: 1, space_id: team.id }),
+        widerMessage("Team", "メンバー指定（選ばれたユーザーと管理者）", "管理者のみ"),
+      );
+      expect(await readPage(page.id)).toEqual(page);
+      expect(
+        toolJson<PageSummary>(
+          await callTool(adminToken, "move_page", {
+            page_id: page.id,
+            version: 1,
+            space_id: team.id,
+            acknowledge_wider_visibility: true,
+          }),
+        ),
+      ).toMatchObject({ space_id: team.id, version: 2 });
+    });
+
+    it("needs the acknowledgement to move a page or a folder to another members space", async () => {
+      const page = await insertPage({ spaceId: team.id });
+      expectToolError(
+        await callTool(adminToken, "move_page", { page_id: page.id, version: 1, space_id: otherTeam.id }),
+        betweenMembersMessage("Other team"),
+      );
+      expect(await readPage(page.id)).toEqual(page);
+
+      const folder = await insertFolder({ spaceId: team.id });
+      expectToolError(
+        await callTool(adminToken, "move_folder", { folder_id: folder.id, space_id: otherTeam.id }),
+        betweenMembersMessage("Other team"),
+      );
+      expect(await readFolder(folder.id)).toEqual(folder);
+
+      // Inside the same members space nothing widens.
+      const inside = await insertFolder({ spaceId: team.id });
+      expect(
+        toolJson<Folder>(
+          await callTool(adminToken, "move_folder", { folder_id: folder.id, space_id: team.id, parent_id: inside.id }),
+        ),
+      ).toMatchObject({ space_id: team.id, parent_id: inside.id });
+    });
+
+    it("needs the acknowledgement to move a folder from an admin space to a members space", async () => {
+      const folder = await insertFolder({ spaceId: adminSpace.id });
+      expectToolError(
+        await callTool(adminToken, "move_folder", { folder_id: folder.id, space_id: team.id }),
+        widerMessage("Team", "メンバー指定（選ばれたユーザーと管理者）", "管理者のみ"),
+      );
+      expect(await readFolder(folder.id)).toEqual(folder);
+    });
+
+    it("needs no acknowledgement to move from a members space to an admin space", async () => {
+      const page = await insertPage({ spaceId: team.id });
+      expect(
+        toolJson<PageSummary>(
+          await callTool(adminToken, "move_page", { page_id: page.id, version: 1, space_id: adminSpace.id }),
+        ),
+      ).toMatchObject({ space_id: adminSpace.id, version: 2 });
+      const folder = await insertFolder({ spaceId: team.id });
+      expect(
+        toolJson<Folder>(await callTool(adminToken, "move_folder", { folder_id: folder.id, space_id: adminSpace.id })),
+      ).toMatchObject({ space_id: adminSpace.id });
     });
   });
 

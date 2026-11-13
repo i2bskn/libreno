@@ -1,8 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import type { Db } from "@i2bskn/workers-app-core";
 import { folders, type FolderRow, type SpaceRow } from "../db/schema";
-import { canAccessSpace, type SpaceViewer } from "../spaces/access";
-import { findSpaceById } from "../spaces/queries";
+import { findAccessibleSpace, type SpaceViewer } from "../spaces/access";
 
 export function findFolderById(db: Db, id: string): Promise<FolderRow | undefined> {
   return db.select().from(folders).where(eq(folders.id, id)).get();
@@ -17,8 +16,8 @@ export async function findAccessibleFolderWithSpace(
 ): Promise<{ folder: FolderRow; space: SpaceRow } | null> {
   const folder = await findFolderById(db, id);
   if (!folder) return null;
-  const space = await findSpaceById(db, folder.spaceId);
-  if (!space || !canAccessSpace(viewer, space)) return null;
+  const space = await findAccessibleSpace(db, viewer, folder.spaceId);
+  if (!space) return null;
   return { folder, space };
 }
 

@@ -301,13 +301,16 @@ export async function deleteFolder(client: ApiClient, folderId: string): Promise
 
 export type CreateSpaceResult = { kind: "ok"; space: Space } | SendFailure;
 
-// Creates a space that everyone or only admins can see. Admins only; the server trims the name. Errors,
-// including a non-admin (403), are shown with the server's message. Never rejects.
+// Creates a space that everyone, only admins, or the chosen members and admins can see. Admins only; the server
+// trims the name. memberIds is sent only for a members space (the server rejects it for the other kinds). Errors,
+// including a non-admin (403) and a member deleted meanwhile, are shown with the server's message. Never rejects.
 export async function createSpace(
   client: ApiClient,
-  input: { kind: CreateSpaceRequest["kind"]; name: string },
+  input: { kind: CreateSpaceRequest["kind"]; name: string; memberIds?: string[] },
 ): Promise<CreateSpaceResult> {
-  const sent = await send(() => client.api.v1.spaces.$post({ json: { kind: input.kind, name: input.name } }));
+  const json: CreateSpaceRequest = { kind: input.kind, name: input.name };
+  if (input.kind === "members") json.member_ids = input.memberIds ?? [];
+  const sent = await send(() => client.api.v1.spaces.$post({ json }));
   if (sent.kind !== "response") return sent;
   const { res } = sent;
   if (res.ok) {
@@ -333,6 +336,15 @@ export async function updateSpace(
         param: { id: spaceId },
         json: { name: fields.name, sort_order: fields.sortOrder },
       }),
+    ),
+  );
+}
+
+// Replaces the members of a members space. Admins only. Never rejects.
+export async function setSpaceMembers(client: ApiClient, spaceId: string, userIds: string[]): Promise<SpaceActionResult> {
+  return resourceActionResult(
+    await send(() =>
+      client.api.v1.spaces[":id"].members.$put({ param: { id: spaceId }, json: { user_ids: userIds } }),
     ),
   );
 }

@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, isNull, ne, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { clock, type Db } from "@i2bskn/workers-app-core";
 import { spaces, type SpaceRow } from "../db/schema";
-import { canAccessSpace, type SpaceViewer } from "./access";
+import { findAccessibleSpace, type SpaceViewer } from "./access";
 import { findSpaceById } from "./queries";
 
 // Archived spaces keep their contents read only: every write to their pages, folders, attachments and
@@ -37,9 +37,9 @@ export async function setSpaceArchived(
   spaceId: string,
   archived: boolean,
 ): Promise<SetSpaceArchivedResult> {
-  const space = await findSpaceById(db, spaceId);
+  const space = await findAccessibleSpace(db, viewer, spaceId);
   // Spaces the viewer cannot access are reported as missing so that their existence is not revealed.
-  if (!space || !canAccessSpace(viewer, space)) return { ok: false, error: "not_found" };
+  if (!space) return { ok: false, error: "not_found" };
   // Only the owner can see a personal space here, so there is nothing to hide: forbidden rather than not_found.
   if (space.kind === "personal") return { ok: false, error: "forbidden_personal" };
   if ((space.archivedAt !== null) === archived) return { ok: true, space };

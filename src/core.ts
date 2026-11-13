@@ -26,6 +26,7 @@ const hooks: CoreHooks<Bindings, DeleteData> = {
 
   // Deletes the user's personal space and everything in it: pages including the trash, folders, revisions and
   // attachment rows. Content in other spaces stays; its created_by and updated_by become NULL (ON DELETE SET NULL).
+  // The user's rows of space_members are deleted with the user by ON DELETE CASCADE, so they need no statement here.
   async userDeleteStatements({ d1, userId, guard }) {
     const personalSpaces = `SELECT id FROM spaces WHERE owner_user_id = ?1 AND kind = 'personal'`;
     // Children first: attachments (their IDs are decided here, in the same transaction, so that a page moved

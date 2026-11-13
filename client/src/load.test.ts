@@ -23,9 +23,11 @@ import {
   loadPageRevisionView,
   loadPageView,
   loadSearchView,
+  loadSpaceMembers,
   loadSpaceView,
   loadTopPage,
   loadTrashView,
+  loadUserList,
   loadUsersView,
 } from "./load";
 
@@ -811,6 +813,71 @@ describe("loadUsersView", () => {
       "/auth/refresh": [() => new Response(null, { status: 401 })],
     });
     expect(await loadUsersView(client)).toEqual({ kind: "redirecting" });
+    expect(redirectToLogin).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("loadUserList", () => {
+  const USER: User = {
+    id: "u1",
+    email: "a@example.com",
+    name: "A",
+    role: "member",
+    created_at: 1,
+    last_login_at: null,
+  };
+
+  it("is the users of the list", async () => {
+    const { client } = setup({ "/api/v1/users": [json(200, { users: [USER], auth_mode: "password" })] });
+    expect(await loadUserList(client)).toEqual({ kind: "ok", value: [USER] });
+  });
+
+  it.each([403, 404, 500])("is an error on %i", async (code) => {
+    const { client } = setup({ "/api/v1/users": [apiError(code, "だめです")] });
+    expect(await loadUserList(client)).toEqual({ kind: "error" });
+  });
+
+  it("is redirecting when the list stays 401 after the refresh", async () => {
+    const { client, redirectToLogin } = setup({
+      "/api/v1/users": [unauthorized, unauthorized],
+      "/auth/refresh": [() => new Response(null, { status: 401 })],
+    });
+    expect(await loadUserList(client)).toEqual({ kind: "redirecting" });
+    expect(redirectToLogin).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("loadSpaceMembers", () => {
+  const url = "/api/v1/spaces/s1/members";
+
+  it("is the user IDs of the members", async () => {
+    const { client } = setup({ [url]: [json(200, { user_ids: ["u2", "u1"] })] });
+    expect(await loadSpaceMembers(client, "s1")).toEqual({ kind: "ok", value: ["u2", "u1"] });
+  });
+
+  it("is not found on 404 and for an invalid ID, without sending the latter", async () => {
+    const { client, fetch } = setup({ [url]: [apiError(404, "スペースが見つかりません")] });
+    expect(await loadSpaceMembers(client, "s1")).toEqual({ kind: "notFound" });
+    expect(await loadSpaceMembers(client, "../users")).toEqual({ kind: "notFound" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([400, 403, 500])("is an error on %i", async (code) => {
+    const { client } = setup({ [url]: [apiError(code, "だめです")] });
+    expect(await loadSpaceMembers(client, "s1")).toEqual({ kind: "error" });
+  });
+
+  it("is an error when the response is not JSON", async () => {
+    const { client } = setup({ [url]: [() => new Response("ok", { status: 200 })] });
+    expect(await loadSpaceMembers(client, "s1")).toEqual({ kind: "error" });
+  });
+
+  it("is redirecting when the members stay 401 after the refresh", async () => {
+    const { client, redirectToLogin } = setup({
+      [url]: [unauthorized, unauthorized],
+      "/auth/refresh": [() => new Response(null, { status: 401 })],
+    });
+    expect(await loadSpaceMembers(client, "s1")).toEqual({ kind: "redirecting" });
     expect(redirectToLogin).toHaveBeenCalledTimes(1);
   });
 });

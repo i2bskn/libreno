@@ -395,7 +395,7 @@ function MovePage({
   const source = space ?? (spaces.kind === "ok" ? (spaces.value.find((s) => s.id === page.space_id) ?? null) : null);
   const dest = destination.space;
   const folderId = valueToFolderId(folderValue);
-  const warning = source && dest ? widerVisibilityWarning(source.kind, dest) : null;
+  const warning = source && dest ? widerVisibilityWarning(source, dest) : null;
   const unchanged = spaceId === page.space_id && folderId === page.folder_id;
   const busy = state.kind === "sending" || state.kind === "redirecting";
 

@@ -4,7 +4,7 @@ import { clock, type Db } from "@i2bskn/workers-app-core";
 import { isForeignKeyViolation } from "../db/errors";
 import { folders, pages, spaces, type FolderRow, type UserRow } from "../db/schema";
 import {
-  canAccessSpace,
+  findAccessibleSpace,
   visibilityNotAcknowledged,
   type MoveOptions,
   type VisibilityNotAcknowledged,
@@ -26,9 +26,9 @@ export async function createFolder(
   spaceId: string,
   input: CreateFolderInput,
 ): Promise<CreateFolderResult> {
-  const space = await findSpaceById(db, spaceId);
+  const space = await findAccessibleSpace(db, user, spaceId);
   // Spaces the user cannot access are reported as missing so that their existence is not revealed.
-  if (!space || !canAccessSpace(user, space)) return { ok: false, error: "space_not_found" };
+  if (!space) return { ok: false, error: "space_not_found" };
   // Checked after the access, so that whether a space the user cannot access is archived is not revealed.
   if (space.archivedAt !== null) return { ok: false, error: "space_archived" };
   if (input.parentId !== null && !(await folderExistsInSpace(db, input.parentId, space.id))) {
@@ -248,9 +248,9 @@ export async function moveFolder(
   if (!found) return { ok: false, error: "not_found" };
   const { folder, space: source } = found;
   if (source.archivedAt !== null) return { ok: false, error: "space_archived" };
-  const dest = await findSpaceById(db, input.spaceId);
+  const dest = await findAccessibleSpace(db, user, input.spaceId);
   // Spaces the user cannot access are reported as missing so that their existence is not revealed.
-  if (!dest || !canAccessSpace(user, dest)) return { ok: false, error: "space_not_found" };
+  if (!dest) return { ok: false, error: "space_not_found" };
   if (dest.archivedAt !== null) return { ok: false, error: "space_archived" };
   // Checked with the same source space as the condition of the writes: if the folder moves to another
   // space after this, the writes change nothing.

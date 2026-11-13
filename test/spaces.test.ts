@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import type { Space, SpaceList } from "../src/api/types";
 import { clock, isUniqueViolation } from "@i2bskn/workers-app-core";
-import { spaces, users, type SpaceRow, type UserRow } from "../src/db/schema";
-import { accessibleSpacesWhere, canAccessSpace } from "../src/spaces/access";
+import { spaceMembers, spaces, users, type SpaceRow, type UserRow } from "../src/db/schema";
+import { findAccessibleSpace } from "../src/spaces/access";
 import { insertPersonalSpaceStatement } from "../src/spaces/queries";
 import { core } from "../src/core";
 import {
@@ -75,27 +75,89 @@ afterEach(() => {
 });
 
 describe("space access", () => {
-  it("gives the same answer from canAccessSpace and accessibleSpacesWhere", async () => {
+  async function insertMembersSpace(name: string, memberIds: string[]): Promise<SpaceRow> {
+    const [space] = await db
+      .insert(spaces)
+      .values({ id: crypto.randomUUID(), kind: "members", name, createdAt: T0, updatedAt: T0 })
+      .returning();
+    if (!space) throw new Error("failed to create space");
+    if (memberIds.length > 0) {
+      await db.insert(spaceMembers).values(memberIds.map((userId) => ({ spaceId: space.id, userId, createdAt: T0 })));
+    }
+    return space;
+  }
+
+  it("gives the same answer from findAccessibleSpace and the list of GET /api/v1/spaces", async () => {
+    const insider = await createUser({ email: "insider@example.com", role: "member", createdAt: T0 - 500 });
+    const insiderCookies = await login(insider.email);
     const everyone = await insertSpace("everyone", "Everyone");
     const adminOnly = await insertSpace("admin", "Admins");
+    const chosen = await insertMembersSpace("Chosen", [insider.id]);
+    // A row of another members space gives no access to this one.
+    const others = await insertMembersSpace("Others", []);
+    await insertMembersSpace("Elsewhere", [member.id]);
+    // Rows of space_members count only for members spaces.
+    const adminWithRow = await insertSpace("admin", "Admins with a row");
+    await db.insert(spaceMembers).values({ spaceId: adminWithRow.id, userId: member.id, createdAt: T0 });
     const adminPersonal = await personalSpaceOf(admin);
     const memberPersonal = await personalSpaceOf(member);
+    const insiderPersonal = await personalSpaceOf(insider);
 
-    const table: [UserRow, SpaceRow, boolean][] = [
-      [admin, everyone, true],
-      [admin, adminOnly, true],
-      [admin, adminPersonal, true],
-      [admin, memberPersonal, false],
-      [member, everyone, true],
-      [member, adminOnly, false],
-      [member, memberPersonal, true],
-      [member, adminPersonal, false],
+    const viewers: [string, UserRow, SessionCookies, Record<string, boolean>][] = [
+      [
+        "admin",
+        admin,
+        adminCookies,
+        { everyone: true, adminOnly: true, chosen: true, others: true, adminWithRow: true, own: true, other: false },
+      ],
+      [
+        "member not in the members",
+        member,
+        memberCookies,
+        { everyone: true, adminOnly: false, chosen: false, others: false, adminWithRow: false, own: true, other: false },
+      ],
+      [
+        "member in the members",
+        insider,
+        insiderCookies,
+        { everyone: true, adminOnly: false, chosen: true, others: false, adminWithRow: false, own: true, other: false },
+      ],
     ];
-    for (const [viewer, space, expected] of table) {
-      expect(canAccessSpace(viewer, space), `${viewer.role} -> ${space.kind}`).toBe(expected);
-      const rows = await db.select({ id: spaces.id }).from(spaces).where(accessibleSpacesWhere(viewer)).all();
-      expect(rows.some((r) => r.id === space.id), `${viewer.role} -> ${space.kind} (sql)`).toBe(expected);
+    const ownOf = new Map([
+      [admin.id, adminPersonal],
+      [member.id, memberPersonal],
+      [insider.id, insiderPersonal],
+    ]);
+    for (const [label, viewer, cookies, expected] of viewers) {
+      const own = ownOf.get(viewer.id);
+      if (!own) throw new Error("personal space not found");
+      const other = viewer.id === admin.id ? memberPersonal : adminPersonal;
+      const targets: Record<string, SpaceRow> = { everyone, adminOnly, chosen, others, adminWithRow, own, other };
+      const listed = ((await (await send("/api/v1/spaces", { cookies })).json()) as SpaceList).spaces.map((s) => s.id);
+      for (const [key, space] of Object.entries(targets)) {
+        const found = await findAccessibleSpace(appDb, viewer, space.id);
+        expect(found?.id, `${label} -> ${key}`).toBe(expected[key] ? space.id : undefined);
+        expect(listed.includes(space.id), `${label} -> ${key} (list)`).toBe(expected[key]);
+      }
     }
+  });
+
+  it("hides a members space from an admin demoted to member unless they are a member", async () => {
+    await createUser({ email: "second-admin@example.com", role: "admin" });
+    const outsider = await createUser({ email: "outsider-admin@example.com", role: "admin" });
+    const chosen = await insertMembersSpace("Chosen", [admin.id]);
+    const demote = async (user: UserRow) => {
+      const res = await send(`/api/v1/users/${user.id}`, { method: "PATCH", cookies: adminCookies, json: { role: "member" } });
+      expect(res.status).toBe(200);
+    };
+
+    const outsiderCookies = await login(outsider.email);
+    expect((await send(`/api/v1/spaces/${chosen.id}`, { cookies: outsiderCookies })).status).toBe(200);
+    await demote(outsider);
+    expect((await send(`/api/v1/spaces/${chosen.id}`, { cookies: outsiderCookies })).status).toBe(404);
+
+    await demote(admin);
+    expect((await send(`/api/v1/spaces/${chosen.id}`, { cookies: adminCookies })).status).toBe(200);
   });
 });
 

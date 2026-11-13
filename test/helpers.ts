@@ -49,6 +49,7 @@ export async function resetDb(): Promise<void> {
     env.DB.prepare("DELETE FROM pages"),
     // One statement, so the foreign key from parent_id is checked only after all folders are gone.
     env.DB.prepare("DELETE FROM folders"),
+    env.DB.prepare("DELETE FROM space_members"),
     env.DB.prepare("DELETE FROM spaces"),
     env.DB.prepare("DELETE FROM users"),
   ]);

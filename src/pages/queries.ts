@@ -1,8 +1,7 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import type { Db } from "@i2bskn/workers-app-core";
 import { pages, type PageRow, type SpaceRow } from "../db/schema";
-import { canAccessSpace, type SpaceViewer } from "../spaces/access";
-import { findSpaceById } from "../spaces/queries";
+import { findAccessibleSpace, type SpaceViewer } from "../spaces/access";
 
 // A page without its body and without the trash columns, as returned by page lists and search.
 export type PageSummaryRow = Omit<PageRow, "body" | "deletedAt" | "deletedBy">;
@@ -21,8 +20,8 @@ export async function findAccessiblePageIncludingTrash(
 ): Promise<{ page: PageRow; space: SpaceRow } | null> {
   const page = await findPageById(db, id);
   if (!page) return null;
-  const space = await findSpaceById(db, page.spaceId);
-  if (!space || !canAccessSpace(viewer, space)) return null;
+  const space = await findAccessibleSpace(db, viewer, page.spaceId);
+  if (!space) return null;
   return { page, space };
 }
 

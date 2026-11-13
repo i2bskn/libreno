@@ -151,7 +151,7 @@ export function FolderActions({
       ? descendantIds(moveFolders, folderId).add(folderId)
       : new Set<string>();
   const moveDest = destination.space;
-  const moveWarning = moveDest ? widerVisibilityWarning(space.kind, moveDest) : null;
+  const moveWarning = moveDest ? widerVisibilityWarning(space, moveDest) : null;
   const moveToOtherSpace = moveSpaceId !== spaceId;
   const moveUnchanged = !moveToOtherSpace && valueToFolderId(parentValue) === (folder?.parent_id ?? null);
   const moveBlocked =

@@ -28,7 +28,7 @@ function setNow(now: number) {
   vi.spyOn(clock, "now").mockReturnValue(now);
 }
 
-async function insertSpace(kind: "everyone" | "admin", name: string): Promise<SpaceRow> {
+async function insertSpace(kind: "everyone" | "admin" | "members", name: string): Promise<SpaceRow> {
   const [space] = await db
     .insert(spaces)
     .values({ id: crypto.randomUUID(), kind, name, createdAt: T0, updatedAt: T0 })
@@ -165,7 +165,9 @@ describe("POST /api/v1/pages/:id/move", () => {
 
   it("returns 400 space_not_found for a destination the user cannot access", async () => {
     const page = await insertPage({ spaceId: everyone.id });
-    for (const spaceId of [adminOnly.id, (await personalSpaceOf(admin)).id, "missing"]) {
+    // A members space that the user is not a member of.
+    const team = await insertSpace("members", "Team");
+    for (const spaceId of [adminOnly.id, team.id, (await personalSpaceOf(admin)).id, "missing"]) {
       const res = await postPageMove(page.id, memberCookies, { version: 1, space_id: spaceId });
       expect(res.status).toBe(400);
       expect(await errorBody(res)).toEqual({ code: "space_not_found", message: "移動先のスペースが見つかりません" });
@@ -372,7 +374,9 @@ describe("POST /api/v1/folders/:id/move", () => {
 
   it("returns 400 space_not_found for a destination the user cannot access", async () => {
     const t = await tree();
-    for (const spaceId of [adminOnly.id, (await personalSpaceOf(admin)).id, "missing"]) {
+    // A members space that the user is not a member of.
+    const team = await insertSpace("members", "Team");
+    for (const spaceId of [adminOnly.id, team.id, (await personalSpaceOf(admin)).id, "missing"]) {
       const res = await postFolderMove(t.root.id, memberCookies, { space_id: spaceId });
       expect(res.status).toBe(400);
       expect(await errorBody(res)).toEqual({ code: "space_not_found", message: "移動先のスペースが見つかりません" });

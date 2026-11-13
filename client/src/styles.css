@@ -1,7 +1,7 @@
 /*
   libreno: a quiet reading room for the team's pages.
   Paper-toned background, serif headings, one rust accent taken from the logo. Each kind of space (everyone, admins only,
-  personal) has its own color, so that who can see a page is always visible.
+  chosen members, personal) has its own color, so that who can see a page is always visible.
   The tokens are repeated in client/public/server-pages.css (the login and consent screens); keep them in sync.
 */
 
@@ -47,6 +47,9 @@
   --kind-everyone-soft: #e0f0ec;
   --kind-admin: #8a4f00;
   --kind-admin-soft: #f7ead2;
+  /* Plum, apart from the teal, amber and indigo of the other kinds. 6.1:1 on its soft color, 6.8:1 on --bg. */
+  --kind-members: #8a3473;
+  --kind-members-soft: #f6e4ef;
   --kind-personal: #3f479b;
   --kind-personal-soft: #e8e9f7;
 
@@ -92,6 +95,8 @@
     --kind-everyone-soft: #183430;
     --kind-admin: #eab463;
     --kind-admin-soft: #382a14;
+    --kind-members: #ec9ad3;
+    --kind-members-soft: #3a2134;
     --kind-personal: #aab1ff;
     --kind-personal-soft: #262a47;
   }
@@ -1244,6 +1249,11 @@ a.sidebar-link:hover {
   --kind-soft: var(--kind-admin-soft);
 }
 
+.kind-members {
+  --kind: var(--kind-members);
+  --kind-soft: var(--kind-members-soft);
+}
+
 .kind-personal {
   --kind: var(--kind-personal);
   --kind-soft: var(--kind-personal-soft);
@@ -1320,6 +1330,81 @@ a.sidebar-link:hover {
 .kind-choice-note {
   font-size: 0.8125rem;
   color: var(--ink-2);
+}
+
+/* The choice of the members of a members space: checkboxes of all users, scrolled inside the form when there
+   are many. */
+.member-picker {
+  min-width: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.member-picker legend {
+  margin-bottom: 0.35rem;
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.member-picker .form-hint {
+  margin: 0 0 0.5rem;
+}
+
+.member-choices {
+  max-height: 20rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.member-choices > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.folder-form .member-choice {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.6rem 0.875rem;
+  font-weight: 400;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.member-choice input {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+}
+
+.member-choice-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.member-choice-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.member-choice-email {
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
 }
 
 /* A link that makes its whole list row clickable. */

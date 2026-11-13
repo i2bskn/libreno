@@ -223,7 +223,7 @@ export function CloseIcon() {
   );
 }
 
-// Who can see a space: everyone, admins only, or the owner only.
+// Who can see a space: everyone, admins only, the chosen members, or the owner only.
 export function SpaceKindIcon({ kind }: { kind: SpaceKind }) {
   switch (kind) {
     case "everyone":
@@ -233,6 +233,15 @@ export function SpaceKindIcon({ kind }: { kind: SpaceKind }) {
         <Icon>
           <rect x="5" y="10.5" width="14" height="9.5" rx="1.5" />
           <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+        </Icon>
+      );
+    case "members":
+      // A person with a check mark: the users chosen for the space.
+      return (
+        <Icon>
+          <circle cx="10" cy="8.5" r="3.5" />
+          <path d="M3.5 20c.7-3.4 3.3-5.6 6.5-5.6 1.4 0 2.6.4 3.6 1.1" />
+          <path d="m15 18 2 2 4-4.5" />
         </Icon>
       );
     case "personal":

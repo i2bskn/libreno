@@ -5,6 +5,7 @@ import { widensVisibility } from "../../src/spaces/visibility";
 export const SPACE_KIND_LABELS: Record<SpaceKind, string> = {
   everyone: "全員",
   admin: "管理者のみ",
+  members: "メンバー指定",
   personal: "自分だけ",
 };
 
@@ -12,11 +13,12 @@ export const SPACE_KIND_LABELS: Record<SpaceKind, string> = {
 export const SPACE_KIND_DESCRIPTIONS: Record<SpaceKind, string> = {
   everyone: "チームの全員が見られます",
   admin: "管理者だけが見られます",
+  members: "選んだメンバーと管理者が見られます",
   personal: "あなただけが見られます",
 };
 
 // The kinds of space that can be created from the client; personal spaces are created with their user.
-export const CREATABLE_SPACE_KINDS = ["everyone", "admin"] as const satisfies readonly CreateSpaceRequest["kind"][];
+export const CREATABLE_SPACE_KINDS = ["everyone", "admin", "members"] as const satisfies readonly CreateSpaceRequest["kind"][];
 
 export function isCreatableSpaceKind(value: string): value is CreateSpaceRequest["kind"] {
   return (CREATABLE_SPACE_KINDS as readonly string[]).includes(value);
@@ -27,14 +29,25 @@ export function spaceDisplayName(space: Pick<Space, "kind" | "name">): string {
   return space.kind === "personal" ? "個人スペース" : (space.name ?? "");
 }
 
-// The warning shown before moving to a space that more people can see than the current one (sourceKind),
-// or null if the move does not widen who can see it.
-export function widerVisibilityWarning(sourceKind: SpaceKind, dest: Pick<Space, "kind" | "name">): string | null {
-  if (!widensVisibility(sourceKind, dest.kind)) return null;
+// The warning shown before moving from the current space (source) to one that more people can see, or to another
+// members space, whose members may differ; null if the move does not widen who can see it.
+export function widerVisibilityWarning(
+  source: Pick<Space, "id" | "kind">,
+  dest: Pick<Space, "id" | "kind" | "name">,
+): string | null {
+  if (!widensVisibility(source, dest)) return null;
+  const revisions = "ページの過去の版（履歴）と添付ファイルも見られるようになります。";
+  if (source.kind === "members" && dest.kind === "members") {
+    return (
+      `移動先の「${spaceDisplayName(dest)}」は、今のスペースとは見られる人が違います` +
+      `（${SPACE_KIND_LABELS.members} → ${SPACE_KIND_LABELS.members}）。` +
+      revisions
+    );
+  }
   return (
     `移動先の「${spaceDisplayName(dest)}」は、今のスペースより多くの人が見られます` +
-    `（${SPACE_KIND_LABELS[sourceKind]} → ${SPACE_KIND_LABELS[dest.kind]}）。` +
-    "ページの過去の版（履歴）と添付ファイルも見られるようになります。"
+    `（${SPACE_KIND_LABELS[source.kind]} → ${SPACE_KIND_LABELS[dest.kind]}）。` +
+    revisions
   );
 }
 

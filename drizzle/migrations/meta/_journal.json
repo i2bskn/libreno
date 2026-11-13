@@ -78,6 +78,13 @@
       "when": 1793854961435,
       "tag": "0010_mcp_revoked_at",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794561460829,
+      "tag": "0011_wet_switch",
+      "breakpoints": true
     }
   ]
 }

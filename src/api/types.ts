@@ -10,7 +10,8 @@ export type {
   UserList,
 } from "@i2bskn/workers-app-core";
 
-export type SpaceKind = "everyone" | "admin" | "personal";
+// members: the users chosen by an admin and all admins (see SpaceMembers).
+export type SpaceKind = "everyone" | "admin" | "members" | "personal";
 
 export type Space = {
   id: string;
@@ -34,14 +35,29 @@ export type SpaceList = {
 
 // Personal spaces are created with their user and cannot be created here.
 export type CreateSpaceRequest = {
-  kind: "everyone" | "admin";
+  kind: "everyone" | "admin" | "members";
   name: string;
+  // User IDs of the members, accepted only with kind members. Missing means no members; duplicates are removed.
+  member_ids?: string[];
 };
 
-// CreateSpaceRequest after validation. name is trimmed.
+// CreateSpaceRequest after validation. name is trimmed; memberIds is empty unless kind is members.
 export type CreateSpaceInput = {
-  kind: "everyone" | "admin";
+  kind: "everyone" | "admin" | "members";
   name: string;
+  memberIds: string[];
+};
+
+// The users chosen to see a members space, besides all admins. Admins only; not part of Space, so that the lists
+// of spaces returned to every user never include them.
+export type SpaceMembers = {
+  // Ordered by the time they were added, then by ID.
+  user_ids: string[];
+};
+
+// Replaces all the members of a members space. Duplicates are removed.
+export type SetSpaceMembersRequest = {
+  user_ids: string[];
 };
 
 export type UpdateSpaceRequest = {

@@ -91,18 +91,45 @@ describe("formatPurgeRemaining", () => {
 
 describe("widerVisibilityWarning", () => {
   it("warns about a space more people can see, with the kinds and the revisions", () => {
-    expect(widerVisibilityWarning("personal", { kind: "everyone", name: "開発" })).toBe(
+    expect(widerVisibilityWarning({ id: "a", kind: "personal" }, { id: "b", kind: "everyone", name: "開発" })).toBe(
       "移動先の「開発」は、今のスペースより多くの人が見られます（自分だけ → 全員）。" +
         "ページの過去の版（履歴）と添付ファイルも見られるようになります。",
     );
-    expect(widerVisibilityWarning("admin", { kind: "everyone", name: "開発" })).toContain("（管理者のみ → 全員）");
-    expect(widerVisibilityWarning("personal", { kind: "admin", name: "管理" })).toContain("「管理」");
+    expect(widerVisibilityWarning({ id: "a", kind: "admin" }, { id: "b", kind: "everyone", name: "開発" })).toContain(
+      "（管理者のみ → 全員）",
+    );
+    expect(widerVisibilityWarning({ id: "a", kind: "personal" }, { id: "b", kind: "admin", name: "管理" })).toContain(
+      "「管理」",
+    );
+  });
+
+  it("warns about a members space from an admin space, and about an everyone space from a members space", () => {
+    expect(widerVisibilityWarning({ id: "a", kind: "admin" }, { id: "b", kind: "members", name: "チーム" })).toBe(
+      "移動先の「チーム」は、今のスペースより多くの人が見られます（管理者のみ → メンバー指定）。" +
+        "ページの過去の版（履歴）と添付ファイルも見られるようになります。",
+    );
+    expect(widerVisibilityWarning({ id: "a", kind: "members" }, { id: "b", kind: "everyone", name: "開発" })).toContain(
+      "（メンバー指定 → 全員）",
+    );
+  });
+
+  it("warns about another members space, whose members may differ", () => {
+    expect(widerVisibilityWarning({ id: "a", kind: "members" }, { id: "b", kind: "members", name: "別チーム" })).toBe(
+      "移動先の「別チーム」は、今のスペースとは見られる人が違います（メンバー指定 → メンバー指定）。" +
+        "ページの過去の版（履歴）と添付ファイルも見られるようになります。",
+    );
   });
 
   it("is null for a space of the same kind or one fewer people can see", () => {
-    expect(widerVisibilityWarning("everyone", { kind: "everyone", name: "別" })).toBeNull();
-    expect(widerVisibilityWarning("everyone", { kind: "admin", name: "管理" })).toBeNull();
-    expect(widerVisibilityWarning("admin", { kind: "personal", name: null })).toBeNull();
+    expect(widerVisibilityWarning({ id: "a", kind: "everyone" }, { id: "b", kind: "everyone", name: "別" })).toBeNull();
+    expect(widerVisibilityWarning({ id: "a", kind: "everyone" }, { id: "b", kind: "admin", name: "管理" })).toBeNull();
+    expect(widerVisibilityWarning({ id: "a", kind: "admin" }, { id: "b", kind: "personal", name: null })).toBeNull();
+    expect(widerVisibilityWarning({ id: "a", kind: "members" }, { id: "b", kind: "admin", name: "管理" })).toBeNull();
+    expect(widerVisibilityWarning({ id: "a", kind: "everyone" }, { id: "b", kind: "members", name: "チーム" })).toBeNull();
+  });
+
+  it("is null within the same members space", () => {
+    expect(widerVisibilityWarning({ id: "a", kind: "members" }, { id: "a", kind: "members", name: "チーム" })).toBeNull();
   });
 });
 

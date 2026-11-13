@@ -15,6 +15,7 @@ import { Markdown } from "../Markdown";
 import { isValidId, navigate } from "../router";
 import { useSidebarActions, useSidebarLocation, viewLocation } from "../sidebarStore";
 import { ViewStatus, useDocumentTitle, viewTitle } from "./common";
+import { MemberPicker, selectedUserIds, useUserList } from "./MemberPicker";
 
 const UNKNOWN_RESULT_MESSAGE = "サーバーに接続できませんでした。読み込み直して確かめてください";
 
@@ -157,13 +158,16 @@ function ClearTopPage({ client, label, onReload }: { client: ApiClient; label: s
   );
 }
 
-// The button and form for admins to create a space that everyone or only admins can see.
+// The button and form for admins to create a space that everyone, only admins, or the chosen members and admins
+// can see. The users to choose members from are loaded only when the members kind is chosen.
 function CreateSpace({ client, onReload }: { client: ApiClient; onReload: () => void }) {
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [kind, setKind] = useState<CreateSpaceRequest["kind"]>("everyone");
   const [name, setName] = useState("");
+  const [members, setMembers] = useState<Set<string>>(new Set());
+  const users = useUserList(client, open && kind === "members");
   const sidebar = useSidebarActions();
 
   function openForm() {
@@ -171,6 +175,7 @@ function CreateSpace({ client, onReload }: { client: ApiClient; onReload: () => 
     setFailure(null);
     setKind("everyone");
     setName("");
+    setMembers(new Set());
   }
 
   function close() {
@@ -179,9 +184,14 @@ function CreateSpace({ client, onReload }: { client: ApiClient; onReload: () => 
   }
 
   async function submit() {
+    // Members are chosen from the users; without them there is nothing to send yet.
+    if (kind === "members" && users.kind !== "ok") return;
     setSending(true);
     setFailure(null);
-    const result = await createSpace(client, { kind, name });
+    const result = await createSpace(
+      client,
+      users.kind === "ok" ? { kind, name, memberIds: selectedUserIds(users.value, members) } : { kind, name },
+    );
     // The space may also have been created when the result is unknown.
     if (result.kind === "ok" || result.kind === "unknown") sidebar.invalidateSpaces();
     switch (result.kind) {
@@ -259,8 +269,12 @@ function CreateSpace({ client, onReload }: { client: ApiClient; onReload: () => 
               </label>
             ))}
           </fieldset>
+          {kind === "members" && (
+            <MemberPicker users={users} selected={members} onChange={setMembers} disabled={sending} />
+          )}
           <div className="folder-form-actions">
-            <button type="submit" disabled={sending}>
+            {/* Members are chosen from the users, so a members space waits for them to load. */}
+            <button type="submit" disabled={sending || (kind === "members" && users.kind !== "ok")}>
               作成
             </button>
             <button type="button" onClick={close} disabled={sending}>

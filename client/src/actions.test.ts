@@ -18,6 +18,7 @@ import {
   restoreRevision,
   restoreTrashedPage,
   revokeUserSessions,
+  setSpaceMembers,
   setTopPage,
   trashPage,
   unarchiveSpace,
@@ -538,6 +539,18 @@ describe("createSpace", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ kind: "admin", name: "運用" });
   });
 
+  it("sends member_ids only for a members space", async () => {
+    const { client, fetch } = setup(() => Response.json({ ...SPACE, kind: "members" }, { status: 201 }), 401, url);
+    await createSpace(client, { kind: "members", name: "チーム", memberIds: ["u1", "u2"] });
+    await createSpace(client, { kind: "members", name: "空" });
+    await createSpace(client, { kind: "admin", name: "運用", memberIds: ["u1"] });
+    expect(fetch.mock.calls.map((call) => JSON.parse(String(call[1]?.body)))).toEqual([
+      { kind: "members", name: "チーム", member_ids: ["u1", "u2"] },
+      { kind: "members", name: "空", member_ids: [] },
+      { kind: "admin", name: "運用" },
+    ]);
+  });
+
   it("is an error when the created space is not JSON", async () => {
     const { client } = setup(() => new Response("created", { status: 201 }), 401, url);
     expect(await createSpace(client, input)).toEqual({
@@ -614,6 +627,48 @@ describe("setTopPage", () => {
     const { client, fetch } = setup(() => Response.json({ page: null }), 401, url);
     expect(await setTopPage(client, "../users")).toEqual({ kind: "error", message: "ページが見つかりません" });
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("setSpaceMembers", () => {
+  const url = "/api/v1/spaces/s1/members";
+
+  it("sends the user IDs in one PUT and is ok on 200", async () => {
+    const { client, fetch } = setup(() => Response.json({ user_ids: ["u1"] }), 401, url);
+    expect(await setSpaceMembers(client, "s1", ["u1", "u2"])).toEqual({ kind: "ok" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const init = fetch.mock.calls[0]?.[1];
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(String(init?.body))).toEqual({ user_ids: ["u1", "u2"] });
+  });
+
+  it("sends an empty list to remove every member", async () => {
+    const { client, fetch } = setup(() => Response.json({ user_ids: [] }), 401, url);
+    expect(await setSpaceMembers(client, "s1", [])).toEqual({ kind: "ok" });
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ user_ids: [] });
+  });
+
+  it("is not found on 404", async () => {
+    const { client } = setup(apiError(404, "スペースが見つかりません"), 401, url);
+    expect(await setSpaceMembers(client, "s1", ["u1"])).toEqual({ kind: "notFound" });
+  });
+
+  it.each([
+    [400, "存在しないユーザーが含まれています。画面を読み込み直してください"],
+    [403, "管理者の権限が必要です"],
+  ])("is an error with the API message on %i", async (code, message) => {
+    const { client } = setup(apiError(code, message), 401, url);
+    expect(await setSpaceMembers(client, "s1", ["u1"])).toEqual({ kind: "error", message });
+  });
+
+  it("is unknown when fetch rejects", async () => {
+    const { client } = setup(() => Promise.reject(new TypeError("Failed to fetch")), 401, url);
+    expect(await setSpaceMembers(client, "s1", ["u1"])).toEqual({ kind: "unknown" });
+  });
+
+  it("is redirecting when login is required", async () => {
+    const { client } = setup(apiError(401, "ログインしてください"), 401, url);
+    expect(await setSpaceMembers(client, "s1", ["u1"])).toEqual({ kind: "redirecting" });
   });
 });
 

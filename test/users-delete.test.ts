@@ -2,7 +2,17 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { attachmentKey } from "../src/attachments/service";
-import { attachments, folders, pageRevisions, pages, spaces, users, type SpaceRow, type UserRow } from "../src/db/schema";
+import {
+  attachments,
+  folders,
+  pageRevisions,
+  pages,
+  spaceMembers,
+  spaces,
+  users,
+  type SpaceRow,
+  type UserRow,
+} from "../src/db/schema";
 import {
   createUser,
   db,
@@ -206,6 +216,24 @@ describe("DELETE /api/v1/users/:id", () => {
       expect(await countRows("attachments", content.attachmentIds)).toBe(2);
       for (const id of content.attachmentIds) expect(await objectExists(id)).toBe(true);
     }
+  });
+
+  it("deletes the user's rows of space_members and keeps the members space with its other members", async () => {
+    const [team] = await db
+      .insert(spaces)
+      .values({ id: crypto.randomUUID(), kind: "members", name: "Team", createdAt: T0, updatedAt: T0 })
+      .returning();
+    if (!team) throw new Error("failed to create space");
+    await db.insert(spaceMembers).values([
+      { spaceId: team.id, userId: member.id, createdAt: T0 },
+      { spaceId: team.id, userId: admin.id, createdAt: T0 },
+    ]);
+
+    expect((await deleteRequest(member.id, adminCookies)).status).toBe(204);
+
+    const rows = await db.select().from(spaceMembers).all();
+    expect(rows.map((row) => row.userId)).toEqual([admin.id]);
+    expect(await countRows("spaces", [team.id])).toBe(1);
   });
 
   it("signs the deleted user out", async () => {

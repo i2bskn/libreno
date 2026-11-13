@@ -321,6 +321,28 @@ export async function loadSpaceList(client: ApiClient): Promise<ListResult<Space
   return { kind: "ok", value: list.value.spaces };
 }
 
+// All the users, to choose the members of a members space from. Admins only. Never rejects.
+export async function loadUserList(client: ApiClient): Promise<ListResult<User[]>> {
+  const list = await request(() => client.api.v1.users.$get());
+  if (list.kind === "redirecting") return list;
+  if (list.kind !== "ok") return { kind: "error" };
+  return { kind: "ok", value: list.value.users };
+}
+
+// The user IDs of the members of a members space, for the member editor. Admins only. A 404 (the space was
+// deleted, or is not accessible) is notFound, so that the editor can say the space is gone. Never rejects.
+export async function loadSpaceMembers(
+  client: ApiClient,
+  spaceId: string,
+): Promise<{ kind: "ok"; value: string[] } | { kind: "notFound" } | { kind: "error" } | { kind: "redirecting" }> {
+  if (!isValidId(spaceId)) return { kind: "notFound" };
+  const members = await request(() => client.api.v1.spaces[":id"].members.$get({ param: { id: spaceId } }));
+  if (members.kind === "redirecting") return members;
+  if (members.kind === "notFound") return { kind: "notFound" };
+  if (members.kind !== "ok") return { kind: "error" };
+  return { kind: "ok", value: members.value.user_ids };
+}
+
 // All the folders of a space, to choose the destination of a move from. Never rejects.
 export async function loadFolderList(client: ApiClient, spaceId: string): Promise<ListResult<Folder[]>> {
   if (!isValidId(spaceId)) return { kind: "error" };
