@@ -104,6 +104,15 @@ export function MarkdownIcon() {
   );
 }
 
+// Lines of text, for the text of a page body.
+export function TextIcon() {
+  return (
+    <Icon>
+      <path d="M4.5 6.5h15M4.5 10.5h15M4.5 14.5h15M4.5 18.5h9" />
+    </Icon>
+  );
+}
+
 export function CheckIcon() {
   return (
     <Icon>

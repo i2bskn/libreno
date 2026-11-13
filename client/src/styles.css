@@ -1733,6 +1733,13 @@ h2.spaces-heading {
   font-size: 0.875rem;
 }
 
+/* The body is prose, so it keeps the text font. */
+.copy-fallback textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+}
+
 .page-body {
   margin-bottom: 3.5rem;
 }

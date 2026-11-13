@@ -15,6 +15,7 @@ import {
   MoveIcon,
   PageIcon,
   PinIcon,
+  TextIcon,
   TrashIcon,
 } from "../icons";
 import { Link } from "../Link";
@@ -52,6 +53,8 @@ export function PageView({
   // Whether the panel to move the page is shown.
   const [moving, setMoving] = useState(false);
   const [copy, setCopy] = useState<CopyState>({ kind: "idle" });
+  // The rendered body, whose text is copied as it is shown: without the Markdown syntax.
+  const body = useRef<HTMLElement>(null);
   useDocumentTitle(viewTitle(state, (data) => data.page.title));
   useSidebarLocation(
     viewLocation(state, ({ page }) => ({
@@ -101,7 +104,7 @@ export function PageView({
       <header className="page-header">
         <div className="page-title">
           <h1 className="page-heading">{page.title}</h1>
-          <CopyButton target={{ what: "title", text: page.title }} copy={copy} setCopy={setCopy} className="title-copy-button" />
+          <CopyButton what="title" text={() => page.title} copy={copy} setCopy={setCopy} className="title-copy-button" />
         </div>
         <p className="page-info">
           {space && <SpaceKindBadge kind={space.kind} />}
@@ -119,13 +122,22 @@ export function PageView({
                 </Link>
               )}
               <CopyButton
-                target={{ what: "url", text: pageUrl(origin, page.id) }}
+                what="url"
+                text={() => pageUrl(origin, page.id)}
                 copy={copy}
                 setCopy={setCopy}
                 className="toolbar-icon-button"
               />
               <CopyButton
-                target={{ what: "link", text: markdownLinkToPage(page.title, page.id) }}
+                what="link"
+                text={() => markdownLinkToPage(page.title, page.id)}
+                copy={copy}
+                setCopy={setCopy}
+                className="toolbar-icon-button"
+              />
+              <CopyButton
+                what="body"
+                text={() => body.current?.innerText.trim() ?? ""}
                 copy={copy}
                 setCopy={setCopy}
                 className="toolbar-icon-button"
@@ -173,7 +185,7 @@ export function PageView({
         />
       )}
       {confirmingDelete && !archived && <TrashPage client={client} page={page} onCancel={() => setConfirmingDelete(false)} />}
-      <article className="page-body">
+      <article ref={body} className="page-body">
         <Markdown body={page.body} origin={origin} />
       </article>
       <Backlinks client={client} pageId={page.id} />
@@ -181,41 +193,61 @@ export function PageView({
   );
 }
 
-// What is copied: the title of the page, its full URL, or the Markdown link to it.
-type CopyTarget = { what: "title" | "url" | "link"; text: string };
+// What is copied: the title of the page, its full URL, the Markdown link to it, or the text of its body.
+type CopyTarget = { what: "title" | "url" | "link" | "body"; text: string };
 
 type CopyState = { kind: "idle" } | { kind: "copied"; what: CopyTarget["what"] } | { kind: "failed"; target: CopyTarget };
 
-const COPY_LABELS: Record<CopyTarget["what"], string> = { title: "タイトル", url: "URL", link: "Markdownのリンク" };
+const COPY_LABELS: Record<CopyTarget["what"], string> = {
+  title: "タイトル",
+  url: "URL",
+  link: "Markdownのリンク",
+  body: "本文のテキスト",
+};
 
-const COPY_ICONS: Record<CopyTarget["what"], () => ReactNode> = { title: CopyIcon, url: LinkIcon, link: MarkdownIcon };
+const COPY_ICONS: Record<CopyTarget["what"], () => ReactNode> = {
+  title: CopyIcon,
+  url: LinkIcon,
+  link: MarkdownIcon,
+  body: TextIcon,
+};
 
 const FALLBACK_LABELS: Record<CopyTarget["what"], string> = {
   title: "ページのタイトル",
   url: "ページのURL",
   link: "ページへのリンク",
+  body: "本文のテキスト",
 };
 
 // How long the check mark and the message stay after copying.
 const COPIED_MS = 2000;
 
 // A button that shows only an icon; its name is given by aria-label and shown as a tooltip by title. The icon
-// turns into a check mark for a while after the text is copied.
+// turns into a check mark for a while after the text is copied. text is called on click, so that the body is read
+// as it is rendered then.
 function CopyButton({
-  target,
+  what,
+  text,
   copy,
   setCopy,
   className,
 }: {
-  target: CopyTarget;
+  what: CopyTarget["what"];
+  text: () => string;
   copy: CopyState;
   setCopy: (state: CopyState) => void;
   className: string;
 }) {
-  const label = `${COPY_LABELS[target.what]}をコピー`;
-  const Icon = copy.kind === "copied" && copy.what === target.what ? CheckIcon : COPY_ICONS[target.what];
+  const label = `${COPY_LABELS[what]}をコピー`;
+  const Icon = copy.kind === "copied" && copy.what === what ? CheckIcon : COPY_ICONS[what];
   return (
-    <button type="button" className={className} aria-label={label} title={label} onClick={() => void copyText(target, setCopy)}>
+    <button
+      type="button"
+      className={className}
+      aria-label={label}
+      title={label}
+      onClick={() => void copyText({ what, text: text() }, setCopy)}
+    >
       <Icon />
     </button>
   );
@@ -235,9 +267,10 @@ async function copyText(target: CopyTarget, setCopy: (state: CopyState) => void)
   }
 }
 
-// The text in a read-only input, selected so that it can be copied with the keyboard or the menu.
+// The text in a read-only field, selected so that it can be copied with the keyboard or the menu. The body has
+// several lines, so it is put in a textarea.
 function CopyFallback({ target }: { target: CopyTarget }) {
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
 
   useEffect(() => {
     input.current?.select();
@@ -246,14 +279,25 @@ function CopyFallback({ target }: { target: CopyTarget }) {
   return (
     <div className="copy-fallback">
       <p role="alert">{COPY_LABELS[target.what]}をコピーできませんでした。選択してコピーしてください</p>
-      <input
-        ref={input}
-        type="text"
-        readOnly
-        value={target.text}
-        aria-label={FALLBACK_LABELS[target.what]}
-        onFocus={(event) => event.currentTarget.select()}
-      />
+      {target.what === "body" ? (
+        <textarea
+          ref={input}
+          readOnly
+          rows={8}
+          value={target.text}
+          aria-label={FALLBACK_LABELS[target.what]}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      ) : (
+        <input
+          ref={input}
+          type="text"
+          readOnly
+          value={target.text}
+          aria-label={FALLBACK_LABELS[target.what]}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      )}
     </div>
   );
 }
