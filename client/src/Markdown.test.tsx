@@ -80,6 +80,19 @@ describe("Markdown", () => {
     expect(html).not.toContain("style=");
   });
 
+  it("puts a button to copy the code beside each code block, outside the pre", () => {
+    const html = render("```js\nconst a = 1;\n```\n\n```\nplain\n```\n");
+    expect(html.match(/<div class="code-block"><pre>/g)).toHaveLength(2);
+    expect(html).toMatch(
+      /<\/pre><button type="button" class="code-copy-button" aria-label="コードをコピー" title="コードをコピー">/,
+    );
+    expect(html).not.toContain("node=");
+  });
+
+  it("does not put a copy button on inline code", () => {
+    expect(render("文中の `const a`")).not.toContain("code-copy-button");
+  });
+
   it("does not highlight code blocks without a language", () => {
     expect(render("```\nconst a = 1;\n```\n")).not.toContain("hljs");
   });

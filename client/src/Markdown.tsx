@@ -1,6 +1,8 @@
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import { CheckIcon, CopyIcon } from "./icons";
 
 const remarkPlugins = [remarkGfm];
 
@@ -31,6 +33,9 @@ export function Markdown({ body, origin }: { body: string; origin: string }) {
       if (!isExternalLink(props.href, origin)) return <a {...props} />;
       return <a {...props} target="_blank" rel="noopener noreferrer" />;
     },
+    pre({ node: _node, ...props }) {
+      return <CodeBlock {...props} />;
+    },
     // Wide tables scroll inside the wrapper instead of the page.
     table({ node: _node, ...props }) {
       return (
@@ -51,6 +56,59 @@ export function Markdown({ body, origin }: { body: string; origin: string }) {
       >
         {body}
       </ReactMarkdown>
+    </div>
+  );
+}
+
+type CodeCopyState = "idle" | "copied" | "failed";
+
+const CODE_COPY_LABELS: Record<CodeCopyState, string> = {
+  idle: "コードをコピー",
+  copied: "コピーしました",
+  failed: "コピーできませんでした。選択されたコードをコピーしてください",
+};
+
+// How long the check mark stays after copying, as on the toolbar of a page.
+const CODE_COPIED_MS = 2000;
+
+// A code block with a button that copies its code. The button sits outside the pre, so that it stays in the corner
+// while the code scrolls sideways. It has no text of its own (its name is the aria-label), so the text of the page
+// body copied from the toolbar does not get it.
+function CodeBlock(props: ComponentProps<"pre">) {
+  const pre = useRef<HTMLPreElement>(null);
+  const [state, setState] = useState<CodeCopyState>("idle");
+
+  useEffect(() => {
+    if (state === "idle") return;
+    const timer = setTimeout(() => setState("idle"), CODE_COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  // The code is read from the DOM on click, so the highlighting spans need not be taken apart. The newline that
+  // ends every code block is not part of the code.
+  async function copy(): Promise<void> {
+    const element = pre.current;
+    if (element === null) return;
+    setState("idle");
+    try {
+      if (typeof navigator.clipboard?.writeText !== "function") throw new Error("no clipboard API");
+      await navigator.clipboard.writeText((element.textContent ?? "").replace(/\n$/, ""));
+      setState("copied");
+    } catch {
+      // The clipboard API is missing outside secure contexts and can reject; then the code is selected to be
+      // copied with the keyboard or the menu.
+      window.getSelection()?.selectAllChildren(element);
+      setState("failed");
+    }
+  }
+
+  const label = CODE_COPY_LABELS[state];
+  return (
+    <div className="code-block">
+      <pre ref={pre} {...props} />
+      <button type="button" className="code-copy-button" aria-label={label} title={label} onClick={() => void copy()}>
+        {state === "copied" ? <CheckIcon /> : <CopyIcon />}
+      </button>
     </div>
   );
 }
