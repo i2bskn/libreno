@@ -62,5 +62,8 @@
       // R2 must be enabled in the Cloudflare dashboard first (see README).
       "binding": "ATTACHMENTS"
     }
-  ]
+  ],
+  // Browser Rendering (Browser Run), used to make PDFs of pages only when the PDF_RENDERER variable is
+  // "browser" (src/pdf/renderer.ts). Declaring it costs nothing: only the browser time used is billed.
+  "browser": { "binding": "BROWSER" }
 }

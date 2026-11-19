@@ -5,6 +5,7 @@ import type { AppEnv } from "./env";
 import attachmentsApi from "./routes/attachments";
 import foldersApi from "./routes/folders";
 import pagesApi from "./routes/pages";
+import pdfSettingsApi from "./routes/pdf-settings";
 import searchApi from "./routes/search";
 import spacesApi from "./routes/spaces";
 import topPageApi from "./routes/top-page";
@@ -34,7 +35,8 @@ const apiRoutes = app
   .route("/api/v1/folders", foldersApi)
   .route("/api/v1/attachments", attachmentsApi)
   .route("/api/v1/search", searchApi)
-  .route("/api/v1/top-page", topPageApi);
+  .route("/api/v1/top-page", topPageApi)
+  .route("/api/v1/pdf-settings", pdfSettingsApi);
 
 // Types for hc<AppType>(). Only /api/v1/* is included.
 export type AppType = typeof apiRoutes;

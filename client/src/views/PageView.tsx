@@ -15,6 +15,7 @@ import {
   MoveIcon,
   PageIcon,
   PinIcon,
+  PrintIcon,
   TextIcon,
   TrashIcon,
 } from "../icons";
@@ -144,7 +145,8 @@ export function PageView({
               />
             </>
           )}
-          {/* The menu stays on an archived page for its history; the items that change the page are left out. */}
+          {/* The menu stays on an archived page for its history and the PDF output; the items that change the page
+              are left out. */}
           <PageMenu
             client={client}
             page={page}
@@ -477,8 +479,9 @@ type TopPageState =
   // The move to the login page has started; the button stays disabled.
   | { kind: "redirecting" };
 
-// The "…" menu of the page toolbar: moving, the history, deleting and, for admins, showing the page at the top of
-// the home screen. On an archived page it holds only the history. Whether the page is at the top is told by loading the current top page; the item is shown only after it
+// The "…" menu of the page toolbar: moving, the history, the PDF output, deleting and, for admins, showing the page
+// at the top of the home screen. On an archived page it holds only the history and the PDF output, which only read
+// the page. Whether the page is at the top is told by loading the current top page; the item is shown only after it
 // is loaded. It loads the whole top page only to compare the ID. The result of that item is shown next to the
 // menu, which closes when an item is chosen.
 function PageMenu({
@@ -551,6 +554,12 @@ function PageMenu({
           <Link to={`/pages/${page.id}/history`} className="menu-item">
             <HistoryIcon />
             履歴
+          </Link>
+        )}
+        {isValidId(page.id) && (
+          <Link to={`/pages/${page.id}/pdf`} className="menu-item">
+            <PrintIcon />
+            PDFで出力
           </Link>
         )}
         {canSetTopPage && current.kind === "ok" && (

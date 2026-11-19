@@ -6,6 +6,7 @@ import type {
   PageRevision,
   PageRevisionSummary,
   PageSummary,
+  PdfSettings,
   SearchHit,
   Space,
   TrashedPage,
@@ -221,6 +222,21 @@ export async function loadPageNewView(client: ApiClient, spaceId: string): Promi
 // The same data as the page screen. When folders is null the page can be edited, but not moved.
 export function loadPageEditView(client: ApiClient, id: string): Promise<Loaded<PageData>> {
   return loadPageView(client, id);
+}
+
+// settings is null when it could not be loaded; the screen is shown anyway, with the print dialog and empty
+// defaults.
+export type PagePdfData = { page: Page; settings: PdfSettings | null };
+
+export async function loadPagePdf(client: ApiClient, id: string): Promise<Loaded<PagePdfData>> {
+  if (!isValidId(id)) return { kind: "notFound" };
+  const [page, settings] = await Promise.all([
+    request(() => client.api.v1.pages[":id"].$get({ param: { id } })),
+    request(() => client.api.v1["pdf-settings"].$get()),
+  ]);
+  if (page.kind !== "ok") return failure([page]);
+  if (settings.kind === "redirecting") return settings;
+  return { kind: "ready", data: { page: page.value, settings: settings.kind === "ok" ? settings.value : null } };
 }
 
 // space is null when it could not be loaded; the history is shown anyway.

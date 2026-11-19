@@ -39,17 +39,25 @@ export const attachmentBodyLimit = bodyLimit({
 });
 
 // RFC 6266: a quoted ASCII name for old clients, and the UTF-8 name in filename*. encodeURIComponent leaves
-// ' ( ) * as they are, which are not allowed in filename*.
-function contentDisposition(attachment: AttachmentRow): string {
-  // Images are shown in <img> and in the browser. PDF is downloaded: whether the PDF viewers of browsers work
-  // under the sandbox CSP below is not known.
-  const type = attachment.contentType === "application/pdf" ? "attachment" : "inline";
-  const ascii = attachment.filename.replace(/[^\x20-\x7e]|["\\]/g, "_");
-  const encoded = encodeURIComponent(attachment.filename).replace(
+// ' ( ) * as they are, which are not allowed in filename*. ascii is the name for old clients; by default the
+// filename with the characters outside printable ASCII replaced. Also used for the PDF of a page (pages.ts).
+export function contentDisposition(
+  type: "attachment" | "inline",
+  filename: string,
+  ascii = filename.replace(/[^\x20-\x7e]|["\\]/g, "_"),
+): string {
+  const encoded = encodeURIComponent(filename).replace(
     /['()*]/g,
     (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`,
   );
   return `${type}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+function attachmentContentDisposition(attachment: AttachmentRow): string {
+  // Images are shown in <img> and in the browser. PDF is downloaded: whether the PDF viewers of browsers work
+  // under the sandbox CSP below is not known.
+  const type = attachment.contentType === "application/pdf" ? "attachment" : "inline";
+  return contentDisposition(type, attachment.filename);
 }
 
 const attachmentsApi = new Hono<AppEnv>()
@@ -67,7 +75,7 @@ const attachmentsApi = new Hono<AppEnv>()
     return c.body(object.body, 200, {
       "Content-Type": attachment.contentType,
       "Content-Length": String(object.size),
-      "Content-Disposition": contentDisposition(attachment),
+      "Content-Disposition": attachmentContentDisposition(attachment),
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
       "Cross-Origin-Resource-Policy": "same-origin",

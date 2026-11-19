@@ -107,7 +107,14 @@ describe("PUT /api/v1/top-page", () => {
     const res = await putTopPage(adminCookies, { page_id: page.id });
     expect(res.status).toBe(200);
     expect(((await res.json()) as TopPage).page).toMatchObject({ id: page.id, title: "Links" });
-    expect(await readSettings()).toEqual({ id: 1, topPageId: page.id, updatedBy: admin.id, updatedAt: T0 });
+    expect(await readSettings()).toEqual({
+      id: 1,
+      topPageId: page.id,
+      pdfIssuer: null,
+      pdfConfidentiality: null,
+      updatedBy: admin.id,
+      updatedAt: T0,
+    });
 
     const got = await send("/api/v1/top-page", { cookies: memberCookies });
     expect(got.status).toBe(200);
@@ -124,7 +131,14 @@ describe("PUT /api/v1/top-page", () => {
     const res = await putTopPage(adminCookies, { page_id: null });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ page: null });
-    expect(await readSettings()).toEqual({ id: 1, topPageId: null, updatedBy: admin.id, updatedAt: T0 + 1000 });
+    expect(await readSettings()).toEqual({
+      id: 1,
+      topPageId: null,
+      pdfIssuer: null,
+      pdfConfidentiality: null,
+      updatedBy: admin.id,
+      updatedAt: T0 + 1000,
+    });
     expect(await getTopPageId(memberCookies)).toBeNull();
   });
 
@@ -241,7 +255,14 @@ describe("the page after it is set", () => {
     const otherCookies = await login(other.email);
     const res = await send(`/api/v1/users/${admin.id}`, { method: "DELETE", cookies: otherCookies });
     expect(res.status).toBe(204);
-    expect(await readSettings()).toEqual({ id: 1, topPageId: page.id, updatedBy: null, updatedAt: T0 });
+    expect(await readSettings()).toEqual({
+      id: 1,
+      topPageId: page.id,
+      pdfIssuer: null,
+      pdfConfidentiality: null,
+      updatedBy: null,
+      updatedAt: T0,
+    });
     expect(await getTopPageId(memberCookies)).toBe(page.id);
   });
 

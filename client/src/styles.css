@@ -2842,6 +2842,129 @@ h2.spaces-heading {
   background: var(--bg);
 }
 
+/* ---------- PDF output ---------- */
+
+/* The form and the preview side by side on a wide screen, one above the other otherwise. The preview is an iframe
+   with its own CSS (client/public/print-document.css), sized to its contents by client/src/pdf/PrintFrame.tsx. */
+.main.pdf-view {
+  max-width: calc(var(--measure-wide) + 2.5rem);
+}
+
+.pdf-back {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.pdf-layout {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.pdf-form {
+  min-width: 0;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.pdf-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.pdf-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  min-width: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.pdf-variants legend {
+  margin-bottom: 0.35rem;
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.pdf-form .pdf-variant {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  margin: 0;
+  font-weight: 400;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.pdf-variant input {
+  accent-color: var(--accent);
+}
+
+.pdf-defaults {
+  margin: 0 0 1.25rem;
+}
+
+.pdf-defaults button {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.pdf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.pdf-actions .form-hint,
+.pdf-actions p[role],
+.pdf-defaults p {
+  flex-basis: 100%;
+  margin: 0.25rem 0 0;
+}
+
+.pdf-actions .pdf-note {
+  font-size: 0.8125rem;
+}
+
+.pdf-status {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--link);
+}
+
+.pdf-preview {
+  min-width: 0;
+}
+
+.pdf-preview-frame {
+  display: block;
+  width: 100%;
+  /* Until the contents are measured. */
+  height: 60vh;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+@container (min-width: 720px) {
+  .pdf-layout {
+    grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

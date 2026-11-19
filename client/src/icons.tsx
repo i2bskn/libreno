@@ -113,6 +113,17 @@ export function TextIcon() {
   );
 }
 
+// A page with a printer-like tray, for the PDF output of a page.
+export function PrintIcon() {
+  return (
+    <Icon>
+      <path d="M7 9V3.5h10V9" />
+      <rect x="3.5" y="9" width="17" height="7.5" rx="1.5" />
+      <path d="M7 14h10v6.5H7z" />
+    </Icon>
+  );
+}
+
 export function CheckIcon() {
   return (
     <Icon>

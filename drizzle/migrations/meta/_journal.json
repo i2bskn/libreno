@@ -85,6 +85,13 @@
       "when": 1794561460829,
       "tag": "0011_wet_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795118494198,
+      "tag": "0012_pdf_settings",
+      "breakpoints": true
     }
   ]
 }

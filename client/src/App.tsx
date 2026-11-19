@@ -16,6 +16,7 @@ import { HomeView } from "./views/HomeView";
 import { PageEditView } from "./views/PageEditView";
 import { PageHistoryView } from "./views/PageHistoryView";
 import { PageNewView } from "./views/PageNewView";
+import { PagePdfView } from "./views/PagePdfView";
 import { PageRevisionView } from "./views/PageRevisionView";
 import { PageView } from "./views/PageView";
 import { SearchView } from "./views/SearchView";
@@ -87,6 +88,8 @@ function Screen({ route, user }: { route: Route; user: User }) {
       return <PageView client={client} id={route.id} origin={location.origin} isAdmin={user.role === "admin"} />;
     case "pageHistory":
       return <PageHistoryView client={client} id={route.id} />;
+    case "pagePdf":
+      return <PagePdfView client={client} id={route.id} origin={location.origin} isAdmin={user.role === "admin"} />;
     case "pageRevision":
       return <PageRevisionView client={client} id={route.id} version={route.version} origin={location.origin} />;
     case "pageNew":

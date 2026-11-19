@@ -7,6 +7,7 @@ export type Route =
   | { name: "folder"; id: string }
   | { name: "page"; id: string }
   | { name: "pageHistory"; id: string }
+  | { name: "pagePdf"; id: string }
   | { name: "pageRevision"; id: string; version: number }
   // folderId is the folder to create the page in, from ?folder=; null when missing or invalid.
   | { name: "pageNew"; spaceId: string; folderId: string | null }
@@ -28,6 +29,7 @@ export function isValidId(id: string): boolean {
 const ROUTE_PATTERN = /^\/(spaces|folders|pages)\/([^/]+)$/;
 const PAGE_HISTORY_PATTERN = /^\/pages\/([^/]+)\/history$/;
 const PAGE_EDIT_PATTERN = /^\/pages\/([^/]+)\/edit$/;
+const PAGE_PDF_PATTERN = /^\/pages\/([^/]+)\/pdf$/;
 const PAGE_REVISION_PATTERN = /^\/pages\/([^/]+)\/revisions\/([^/]+)$/;
 const TRASH_PATTERN = /^\/spaces\/([^/]+)\/trash$/;
 const PAGE_NEW_PATTERN = /^\/spaces\/([^/]+)\/new$/;
@@ -49,6 +51,11 @@ function matchPageSubroute(pathname: string): Route | null {
   if (edit) {
     const [, id] = edit;
     return id !== undefined && isValidId(id) ? { name: "pageEdit", id } : { name: "notFound" };
+  }
+  const pdf = PAGE_PDF_PATTERN.exec(pathname);
+  if (pdf) {
+    const [, id] = pdf;
+    return id !== undefined && isValidId(id) ? { name: "pagePdf", id } : { name: "notFound" };
   }
   const revision = PAGE_REVISION_PATTERN.exec(pathname);
   if (revision) {

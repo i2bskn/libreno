@@ -272,3 +272,18 @@ describe("shouldHandleClick", () => {
     expect(shouldHandleClick(click, "_blank")).toBe(false);
   });
 });
+
+describe("matchRoute for the PDF output", () => {
+  it("matches the PDF output screen of a page", () => {
+    expect(matchRoute("/pages/x/pdf")).toEqual({ name: "pagePdf", id: "x" });
+    expect(matchRoute(`/pages/${UUID}/pdf`)).toEqual({ name: "pagePdf", id: UUID });
+    expect(matchRoute("/pages/x/pdf?a=1")).toEqual({ name: "pagePdf", id: "x" });
+  });
+
+  it.each(["/pages/a.b/pdf", "/pages/a%2Fb/pdf", "/pages/x/pdf/", "/pages/x/pdf/1", "/spaces/x/pdf"])(
+    "does not match %s",
+    (path) => {
+      expect(matchRoute(path)).toEqual({ name: "notFound" });
+    },
+  );
+});

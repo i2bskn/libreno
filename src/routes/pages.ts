@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type {
   AttachmentList,
   BacklinkList,
@@ -36,6 +37,9 @@ import { findAccessiblePage } from "../pages/queries";
 import { findAccessiblePageRevision, listAccessiblePageRevisions, restorePageRevision } from "../pages/revisions";
 import { movePage, updatePage } from "../pages/service";
 import { purgeTrashedPage, restoreTrashedPage, trashPage } from "../pages/trash";
+import { pdfFilename } from "../pdf/filename";
+import { renderPdf } from "../pdf/render";
+import { resolvePdfRenderer } from "../pdf/renderer";
 import { spaceArchivedMessage } from "../spaces/archive";
 import {
   emptyUpdateMessage,
@@ -62,7 +66,7 @@ import {
   toApiPageRevisionSummary,
   toApiPageSummary,
 } from "./api";
-import { attachmentBodyLimit, attachmentFilenameQuery } from "./attachments";
+import { attachmentBodyLimit, attachmentFilenameQuery, contentDisposition } from "./attachments";
 
 const { requireAdmin, requireUser } = core.middleware;
 
@@ -130,6 +134,16 @@ const restorePageRevisionBody = jsonBody<RestorePageRevisionRequest, RestorePage
     return { ok: true, value: { version } };
   },
 );
+
+// The HTML of a PDF has the images of the page inlined as data: URIs.
+const PDF_HTML_MAX_BYTES = 20 * 1024 * 1024;
+
+// Like the attachments, without Content-Length (e.g. chunked) bodyLimit counts the bytes as it reads.
+const pdfBodyLimit = bodyLimit({
+  maxSize: PDF_HTML_MAX_BYTES,
+  onError: (c) =>
+    apiError(c, 413, "pdf_too_large", "画像が大きすぎてPDFを作れませんでした。ブラウザで印刷してください"),
+});
 
 const pagesApi = new Hono<AppEnv>()
   .get("/:id", requireUser, async (c) => {
@@ -241,6 +255,44 @@ const pagesApi = new Hono<AppEnv>()
       }
     }
     return c.json(toApiAttachment(result.attachment), 201);
+  })
+  // Makes a PDF of the page with Browser Run, when PDF_RENDERER is "browser". The body is the complete HTML document
+  // made by the client (client/src/pdf/serialize.ts), with the images inlined. Whether it is the body of this page
+  // is not checked: any signed-in user who can read a page can make a PDF of any HTML. The document runs no
+  // JavaScript and fetches nothing, and the use of Browser Run is left unlimited for small teams.
+  // Allowed for the pages of archived spaces: making a PDF only reads the page.
+  .post("/:id/pdf", requireUser, pdfBodyLimit, async (c) => {
+    const browser = c.env.BROWSER;
+    if (resolvePdfRenderer(c.env) !== "server" || !browser) {
+      return apiError(c, 400, "server_pdf_disabled", "サーバーでのPDF生成は設定されていません");
+    }
+    const page = await findAccessiblePage(c.get("db"), c.get("user"), c.req.param("id"));
+    if (!page) return apiError(c, 404, "not_found", pageNotFoundMessage);
+    const contentType = c.req.header("Content-Type") ?? "";
+    if (!contentType.toLowerCase().startsWith("text/html")) {
+      return apiError(c, 415, "unsupported_media_type", "HTML を Content-Type: text/html で送ってください");
+    }
+    const html = await c.req.text();
+    if (html.trim() === "") return apiError(c, 400, "invalid_html", "HTML が空です");
+    const result = await renderPdf(browser, html);
+    if (!result.ok && result.error === "limit_exceeded") {
+      return apiError(
+        c,
+        503,
+        "pdf_limit_exceeded",
+        "PDFの生成の上限に達しました。しばらく待つか、ブラウザで印刷してください",
+      );
+    }
+    if (!result.ok) {
+      return apiError(c, 502, "pdf_failed", "PDFを作成できませんでした。ブラウザで印刷してください");
+    }
+    return c.body(result.body, 200, {
+      "Content-Type": "application/pdf",
+      // The ASCII name is fixed: a title in Japanese would be mostly underscores.
+      "Content-Disposition": contentDisposition("attachment", pdfFilename(page.title), "document.pdf"),
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
   })
   // Moves the page to the trash of its space. It can be restored for 30 days (see pages/trash.ts).
   .delete("/:id", requireUser, async (c) => {

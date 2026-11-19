@@ -169,6 +169,10 @@ export const siteSettings = sqliteTable(
     // The page shown at the top of the home screen. Shown only while it is in an everyone space and not in
     // the trash (checked when read).
     topPageId: text("top_page_id").references(() => pages.id, { onDelete: "set null" }),
+    // The defaults of the PDF output form (src/pdf/settings.ts): the issuer printed on the cover, e.g. a company
+    // name, and the confidentiality label, e.g. "社外秘". null when not set.
+    pdfIssuer: text("pdf_issuer"),
+    pdfConfidentiality: text("pdf_confidentiality"),
     updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: integer("updated_at").notNull(),
   },

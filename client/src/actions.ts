@@ -1,4 +1,12 @@
-import type { Attachment, CreateSpaceRequest, CreateUserRequest, Page, Space, User } from "../../src/api/types";
+import type {
+  Attachment,
+  CreateSpaceRequest,
+  CreateUserRequest,
+  Page,
+  PdfSettings,
+  Space,
+  User,
+} from "../../src/api/types";
 // A value import from the server code: validation.ts imports nothing else, so no other server code is bundled.
 import { ATTACHMENT_MAX_BYTES, emptyFileMessage, fileTooLargeMessage } from "../../src/attachments/validation";
 import { LoginRequiredError, responseError, responseErrorMessage, unexpectedResponseMessage } from "./api";
@@ -385,6 +393,76 @@ export async function setTopPage(client: ApiClient, pageId: string | null): Prom
     }
   }
   return { kind: "error", message: await responseErrorMessage(res) };
+}
+
+export type SavePdfSettingsResult = { kind: "ok"; settings: PdfSettings } | SendFailure;
+
+// Saves the defaults of the PDF output form: the issuer and the confidentiality label. Admins only. The server trims
+// them and saves an empty value as none; invalid values are shown with the server's message. Never rejects.
+export async function savePdfSettings(
+  client: ApiClient,
+  input: { issuer: string; confidentiality: string },
+): Promise<SavePdfSettingsResult> {
+  const sent = await send(() =>
+    client.api.v1["pdf-settings"].$put({ json: { issuer: input.issuer, confidentiality: input.confidentiality } }),
+  );
+  if (sent.kind !== "response") return sent;
+  const { res } = sent;
+  if (res.ok) {
+    try {
+      return { kind: "ok", settings: await res.json() };
+    } catch {
+      return { kind: "error", message: unexpectedResponseMessage(res.status) };
+    }
+  }
+  return { kind: "error", message: await responseErrorMessage(res) };
+}
+
+export const PDF_FAILED_MESSAGE = "PDFを作成できませんでした。ブラウザで印刷してください";
+export const PDF_CONNECTION_MESSAGE = "通信に失敗しました。もう一度お試しください";
+
+export type DownloadPagePdfResult =
+  | { kind: "ok"; pdf: Blob }
+  | { kind: "error"; message: string }
+  // Login is required and the move to the login page has started.
+  | { kind: "redirecting" };
+
+// The message for a failed PDF, by the status and the code of the error. Every failure but a missing page suggests
+// the print dialog, which always works.
+export function pdfErrorMessage(status: number, code: string | null): string {
+  if (status === 413) return "画像が大きすぎてPDFを作れませんでした。ブラウザで印刷してください";
+  if (status === 503 && code === "pdf_limit_exceeded") {
+    return "PDFの生成の上限に達しました。しばらく待つか、ブラウザで印刷してください";
+  }
+  if (status === 400 && code === "server_pdf_disabled") {
+    return "サーバーでのPDF生成は設定されていません。ブラウザで印刷してください";
+  }
+  if (status === 404) return "ページが見つかりません";
+  return PDF_FAILED_MESSAGE;
+}
+
+// Makes a PDF of a page on the server from html, the complete document (pdf/serialize.ts). html is sent as a string,
+// not a stream, so that the retry after refreshing the login can send it again. Never rejects.
+export async function downloadPagePdf(client: ApiClient, pageId: string, html: string): Promise<DownloadPagePdfResult> {
+  if (!isValidId(pageId)) return { kind: "error", message: "ページが見つかりません" };
+  const sent = await send(() =>
+    client.api.v1.pages[":id"].pdf.$post(
+      { param: { id: pageId } },
+      { headers: { "Content-Type": "text/html; charset=utf-8" }, init: { body: html } },
+    ),
+  );
+  if (sent.kind === "redirecting") return sent;
+  if (sent.kind !== "response") return { kind: "error", message: PDF_CONNECTION_MESSAGE };
+  const { res } = sent;
+  if (res.ok) {
+    try {
+      return { kind: "ok", pdf: await res.blob() };
+    } catch {
+      return { kind: "error", message: PDF_CONNECTION_MESSAGE };
+    }
+  }
+  const { code } = await responseError(res);
+  return { kind: "error", message: pdfErrorMessage(res.status, code) };
 }
 
 export type UploadAttachmentResult =

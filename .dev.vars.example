@@ -26,3 +26,8 @@ JWT_SECRET=
 # Users are linked to existing accounts by email, so an unverified login method could take over an account.
 # When the claim is present it must still be true. Review this setting whenever OIDC_ISSUER changes.
 # OIDC_REQUIRE_EMAIL_VERIFIED=false
+
+# Optional. "browser" makes the PDFs of pages on the server with Browser Rendering (the BROWSER binding in
+# wrangler.jsonc); anything else, or unset, leaves it to the print dialog of the browser.
+# This does not work with `wrangler dev`: the local browser binding has no Quick Actions, so the request fails.
+# PDF_RENDERER=browser

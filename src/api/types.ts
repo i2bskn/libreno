@@ -347,3 +347,20 @@ export type TopPage = {
 export type SetTopPageRequest = {
   page_id: string | null;
 };
+
+// How the PDF of a page is made: "print" by the print dialog of the browser, "server" by the Worker with Browser
+// Run (POST /api/v1/pages/:id/pdf). Decided by the PDF_RENDERER variable.
+export type PdfRenderer = "print" | "server";
+
+// The defaults of the PDF output form, the same for every user. issuer and confidentiality are null when not set.
+export type PdfSettings = {
+  renderer: PdfRenderer;
+  issuer: string | null;
+  confidentiality: string | null;
+};
+
+// Admins only. Both keys are required; null or an empty string (after trimming) clears the value.
+export type UpdatePdfSettingsRequest = {
+  issuer: string | null;
+  confidentiality: string | null;
+};
