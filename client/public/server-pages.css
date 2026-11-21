@@ -1,5 +1,5 @@
 /*
-  The screens served by the Worker: login, setup, logout, MCP consent and errors (@i2bskn/workers-app-core,
+  The screens served by the Worker: login, setup, invitations, MFA, logout, MCP consent and errors (@i2bskn/workers-app-core,
   with the layout in src/views/layout.tsx).
   The tokens are the same as in client/src/styles.css; keep them in sync.
 */
@@ -238,6 +238,38 @@ button.primary:hover {
 form > button:only-of-type {
   width: 100%;
   margin-top: 0.5rem;
+}
+
+/* Several buttons of a form (the MFA settings and the recovery form) are stacked, each filling the width. */
+form > button:not(:only-of-type) {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* The QR code of the TOTP setup shrinks on narrow screens. */
+.card img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The TOTP setup key and the recovery codes. Long values wrap (overflow-wrap of body). */
+code {
+  font-size: 0.9375rem;
+}
+
+/* "Use a recovery code" on the MFA screen. */
+.card details {
+  margin-top: 1.5rem;
+}
+
+.card summary {
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.card details[open] summary {
+  margin-bottom: 1rem;
 }
 
 .buttons {

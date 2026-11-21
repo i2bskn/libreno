@@ -2,6 +2,8 @@ import type {
   Attachment,
   CreateSpaceRequest,
   CreateUserRequest,
+  CreateUserResponse,
+  Invitation,
   Page,
   PdfSettings,
   Space,
@@ -513,10 +515,11 @@ export async function deleteAttachment(client: ApiClient, attachmentId: string):
   return { kind: "error", message: await responseErrorMessage(res) };
 }
 
-export type CreateUserResult = { kind: "ok"; user: User } | SendFailure;
+export type CreateUserResult = { kind: "ok"; user: CreateUserResponse } | SendFailure;
 
-// Creates a user with a password (password mode only). Admins only. Errors, including email_taken (409) and
-// the 404 of OIDC mode, are shown with the server's message. Never rejects.
+// Creates a user. Admins only. In password mode, a missing password issues an invitation link (user.invitation);
+// in oidc mode, the user is registered without a password. Errors, including email_taken (409), are shown with
+// the server's message. Never rejects.
 export async function createUser(client: ApiClient, input: CreateUserRequest): Promise<CreateUserResult> {
   const sent = await send(() => client.api.v1.users.$post({ json: input }));
   if (sent.kind !== "response") return sent;
@@ -562,6 +565,44 @@ export async function revokeUserSessions(client: ApiClient, userId: string): Pro
   if (!isValidId(userId)) return INVALID_USER_ID;
   return resourceActionResult(
     await send(() => client.api.v1.users[":id"]["revoke-sessions"].$post({ param: { id: userId } })),
+  );
+}
+
+export type IssueInvitationResult =
+  | { kind: "ok"; invitation: Invitation }
+  // The user is gone, or the server is in OIDC mode.
+  | { kind: "notFound" }
+  | SendFailure;
+
+// Like INVALID_USER_ID, for issueInvitation.
+const INVALID_USER_ID_INVITATION: IssueInvitationResult = { kind: "error", message: "ユーザーが見つかりません" };
+
+// Issues a new invitation link for a user who has not set a password yet (password mode only). Admins only. The
+// earlier link stops working. Errors, including already_active (409), are shown with the server's message.
+// Never rejects.
+export async function issueInvitation(client: ApiClient, userId: string): Promise<IssueInvitationResult> {
+  if (!isValidId(userId)) return INVALID_USER_ID_INVITATION;
+  const sent = await send(() => client.api.v1.users[":id"].invitation.$post({ param: { id: userId } }));
+  if (sent.kind !== "response") return sent;
+  const { res } = sent;
+  if (res.ok) {
+    try {
+      return { kind: "ok", invitation: await res.json() };
+    } catch {
+      return { kind: "error", message: unexpectedResponseMessage(res.status) };
+    }
+  }
+  if (res.status === 404) return { kind: "notFound" };
+  return { kind: "error", message: await responseErrorMessage(res) };
+}
+
+// Deletes the MFA factors of a user and ends their sessions and MCP connections (password mode only). Admins
+// only, and not for themselves. Errors, including mfa_not_enrolled (409), are shown with the server's message.
+// Never rejects.
+export async function resetUserMfa(client: ApiClient, userId: string): Promise<UserActionResult> {
+  if (!isValidId(userId)) return INVALID_USER_ID;
+  return resourceActionResult(
+    await send(() => client.api.v1.users[":id"]["reset-mfa"].$post({ param: { id: userId } })),
   );
 }
 

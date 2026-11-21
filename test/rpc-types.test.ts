@@ -8,8 +8,10 @@ import type {
   CreatePageRequest,
   CreateSpaceRequest,
   CreateUserRequest,
+  CreateUserResponse,
   Folder,
   FolderList,
+  Invitation,
   MoveFolderRequest,
   MovePageRequest,
   Page,
@@ -155,7 +157,13 @@ describe("AppType", () => {
   it("types successful response bodies", () => {
     expectTypeOf<InferResponseType<typeof client.api.v1.me.$get, 200>>().toEqualTypeOf<User>();
     expectTypeOf<InferResponseType<typeof client.api.v1.users.$get, 200>>().toEqualTypeOf<UserList>();
-    expectTypeOf<InferResponseType<typeof client.api.v1.users.$post, 201>>().toEqualTypeOf<User>();
+    // CreateUserResponse is an intersection; the inferred type is the same object written out flat.
+    expectTypeOf<InferResponseType<typeof client.api.v1.users.$post, 201>>().toEqualTypeOf<
+      { [K in keyof CreateUserResponse]: CreateUserResponse[K] }
+    >();
+    expectTypeOf<
+      InferResponseType<(typeof client.api.v1.users)[":id"]["invitation"]["$post"], 200>
+    >().toEqualTypeOf<Invitation>();
     expectTypeOf<InferResponseType<typeof client.api.v1.spaces.$get, 200>>().toEqualTypeOf<SpaceList>();
     expectTypeOf<InferResponseType<typeof client.api.v1.spaces.$post, 201>>().toEqualTypeOf<Space>();
     expectTypeOf<InferResponseType<(typeof client.api.v1.spaces)[":id"]["pages"]["$get"], 200>>().toEqualTypeOf<PageList>();

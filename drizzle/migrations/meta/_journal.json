@@ -92,6 +92,13 @@
       "when": 1795118494198,
       "tag": "0012_pdf_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795290429131,
+      "tag": "0013_core_mfa_invitations",
+      "breakpoints": true
     }
   ]
 }

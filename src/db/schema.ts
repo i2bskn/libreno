@@ -11,9 +11,9 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { users } from "@i2bskn/workers-app-core/schema";
 
-// The tables of login and sessions, from @i2bskn/workers-app-core. Re-exported so that drizzle-kit includes them, and
-// imported for the references below (a re-export creates no local binding).
-export { users, sessions, type UserRow, type SessionRow } from "@i2bskn/workers-app-core/schema";
+// The tables of login, sessions, invitations and password MFA, from @i2bskn/workers-app-core. Re-exported so that
+// drizzle-kit includes them, and users is imported for the references below (a re-export creates no local binding).
+export * from "@i2bskn/workers-app-core/schema";
 
 // Pages belong to one space, and access is decided by the space kind, the viewer's role, the space owner and,
 // for members spaces, the rows of space_members (see spaces/access.ts).

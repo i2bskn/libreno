@@ -12,18 +12,30 @@ JWT_SECRET=
 # "password" (default) or "oidc"
 # AUTH_MODE=password
 
-# Required only when AUTH_MODE=oidc.
+# The HTTPS origin the app is opened at. Required when AUTH_MODE=oidc. With AUTH_MODE=password, it enables
+# passkeys (WebAuthn), which work only on this origin.
 # APP_ORIGIN=https://wiki.example.com
+
+# Required only when AUTH_MODE=oidc.
 # OIDC_ISSUER=https://idp.example.com
 # OIDC_CLIENT_ID=libreno
 # OIDC_CLIENT_SECRET=dummy-secret
 
-# Optional allowlist for AUTH_MODE=oidc. Comma separated emails or domains.
-# ALLOWED_EMAILS=example.com,alice@example.org
+# For AUTH_MODE=oidc. While there are no users, the first sign-in with this email creates the first admin.
+# Ignored once a user exists. Later users sign in only after an admin adds them in user management.
+# INITIAL_ADMIN_EMAIL=admin@example.com
+
+# Optional for AUTH_MODE=password. "optional" (default), "admins" or "all": who must enroll a second factor.
+# "admins" and "all" need APP_ORIGIN or PASSWORD_MFA_KEY.
+# PASSWORD_MFA_POLICY=optional
+
+# Optional for AUTH_MODE=password. Enables authenticator apps (TOTP). 32 random bytes in base64: generate one with
+# `openssl rand -base64 32` and store it as a secret. Changing it makes the registered authenticator apps unusable.
+# PASSWORD_MFA_KEY=
 
 # Optional for AUTH_MODE=oidc. Set to "false" only when the IdP does not send email_verified and every
 # login method of the IdP verifies emails (e.g. Cloudflare Access for SaaS with Google as the only login method).
-# Users are linked to existing accounts by email, so an unverified login method could take over an account.
+# Invited users are linked by email, so an unverified login method could take over an account.
 # When the claim is present it must still be true. Review this setting whenever OIDC_ISSUER changes.
 # OIDC_REQUIRE_EMAIL_VERIFIED=false
 

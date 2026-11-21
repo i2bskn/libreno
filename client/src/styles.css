@@ -1114,6 +1114,28 @@ a.sidebar-link:hover {
   margin: 0 0 0.5rem;
 }
 
+/* The invitation link just issued, in a read-only field that fits the width of the screen. */
+.invitation-link input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+.invitation-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+}
+
+.invitation-link [role="alert"] {
+  margin: 0.75rem 0 0;
+  color: var(--danger);
+}
+
 /* Shown on the screens of an archived space, below the title. */
 .archived-notice {
   margin: 0 0 1.5rem;

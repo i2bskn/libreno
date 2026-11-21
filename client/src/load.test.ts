@@ -790,6 +790,7 @@ describe("loadUsersView", () => {
     role: "admin",
     created_at: 1,
     last_login_at: null,
+    status: "active",
   };
 
   it("shows the users and the auth mode", async () => {
@@ -825,6 +826,7 @@ describe("loadUserList", () => {
     role: "member",
     created_at: 1,
     last_login_at: null,
+    status: "active",
   };
 
   it("is the users of the list", async () => {

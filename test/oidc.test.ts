@@ -1,11 +1,13 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { base64UrlEncode } from "@i2bskn/workers-app-core";
+import type { CreateUserResponse, User } from "../src/api/types";
 import { users } from "../src/db/schema";
 import type { Bindings } from "../src/env";
 import {
   countPersonalSpaces,
   countSpaces,
+  createUser,
   createUserWithoutSpace,
   db,
   OIDC_ORIGIN,
@@ -18,6 +20,8 @@ import {
 
 const ISSUER = oidcEnv.OIDC_ISSUER ?? "";
 const CLIENT_ID = oidcEnv.OIDC_CLIENT_ID ?? "";
+// The first admin of an empty deployment signs in with this email.
+const initialAdminEnv: Partial<Bindings> = { ...oidcEnv, INITIAL_ADMIN_EMAIL: "alice@example.com" };
 
 beforeEach(resetDb);
 
@@ -118,22 +122,80 @@ describe("OIDC flow with a mocked IdP", () => {
     return callback(`code=abc&state=${location.searchParams.get("state")}`, oidcCookie, env);
   }
 
-  it("creates the first user as admin and later users as members, each with a personal space (JIT)", async () => {
-    expect((await loginWith()).status).toBe(303);
+  it("creates the first admin with a personal space for INITIAL_ADMIN_EMAIL while there are no users", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     idTokenClaims = { ...idTokenClaims, sub: "sub-2", email: "bob@example.com", name: "Bob" };
-    expect((await loginWith()).status).toBe(303);
+    const rejected = await loginWith(initialAdminEnv);
+    expect(rejected.status).toBe(403);
+    expect(await db.query.users.findMany()).toHaveLength(0);
+    expect(await countSpaces()).toBe(0);
+    expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_invited" });
 
+    idTokenClaims = { ...idTokenClaims, sub: "sub-1", email: "alice@example.com", name: "Alice" };
+    expect((await loginWith(initialAdminEnv)).status).toBe(303);
     const alice = await db.query.users.findFirst({ where: eq(users.oidcSubject, "sub-1") });
-    const bob = await db.query.users.findFirst({ where: eq(users.oidcSubject, "sub-2") });
     expect(alice).toMatchObject({ role: "admin", email: "alice@example.com" });
-    expect(bob).toMatchObject({ role: "member", email: "bob@example.com" });
+    expect(await db.query.users.findMany()).toHaveLength(1);
     expect(await countPersonalSpaces(alice?.id ?? "")).toBe(1);
-    expect(await countPersonalSpaces(bob?.id ?? "")).toBe(1);
-    expect(await countSpaces()).toBe(2);
+    expect(await countSpaces()).toBe(1);
+  });
+
+  it("returns 403 and creates nothing for an email that is not registered", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await createUser({ email: "bob@example.com", role: "admin", password: null });
+
+    // Without INITIAL_ADMIN_EMAIL, and with it once a user exists.
+    for (const env of [oidcEnv, initialAdminEnv]) {
+      const res = await loginWith(env);
+      expect(res.status).toBe(403);
+    }
+    expect(await db.query.users.findMany()).toHaveLength(1);
+    expect(await countSpaces()).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_invited" });
+  });
+
+  it("returns 403 to an empty deployment without INITIAL_ADMIN_EMAIL", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await loginWith();
+    expect(res.status).toBe(403);
+    expect(await db.query.users.findMany()).toHaveLength(0);
+    expect(await countSpaces()).toBe(0);
+    expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "initial_admin_not_configured" });
+  });
+
+  it("signs in a user registered by an admin, who keeps the personal space created with them", async () => {
+    idTokenClaims = { ...idTokenClaims, sub: "sub-admin", email: "admin@example.com", name: "Admin" };
+    const adminLogin = await loginWith({ ...oidcEnv, INITIAL_ADMIN_EMAIL: "admin@example.com" });
+    expect(adminLogin.status).toBe(303);
+    const adminCookies = sessionCookies(adminLogin);
+
+    const created = await send(`${OIDC_ORIGIN}/api/v1/users`, {
+      env: oidcEnv,
+      cookies: adminCookies,
+      json: { email: "alice@example.com", role: "member" },
+    });
+    expect(created.status).toBe(201);
+    const alice = (await created.json()) as CreateUserResponse;
+    expect(alice).toMatchObject({ email: "alice@example.com", role: "member", status: "invited", invitation: null });
+    expect(await countPersonalSpaces(alice.id)).toBe(1);
+
+    idTokenClaims = { ...idTokenClaims, sub: "sub-1", email: "alice@example.com", name: "Alice" };
+    const res = await loginWith();
+    expect(res.status).toBe(303);
+    expect(await db.query.users.findMany()).toHaveLength(2);
+    expect(await countPersonalSpaces(alice.id)).toBe(1);
+    const linked = await db.query.users.findFirst({ where: eq(users.oidcSubject, "sub-1") });
+    expect(linked?.id).toBe(alice.id);
+
+    const me = await send(`${OIDC_ORIGIN}/api/v1/me`, { env: oidcEnv, cookies: sessionCookies(res) });
+    expect(me.status).toBe(200);
+    expect(((await me.json()) as User).status).toBe("active");
   });
 
   it("redirects to the IdP with PKCE and signs the user in on callback", async () => {
-    const { location, oidcCookie } = await startLogin();
+    // The first admin, created on callback.
+    const { location, oidcCookie } = await startLogin("/wiki", initialAdminEnv);
     expect(`${location.origin}${location.pathname}`).toBe(`${ISSUER}/authorize`);
     expect(location.searchParams.get("redirect_uri")).toBe(`${OIDC_ORIGIN}/auth/oidc/callback`);
     expect(location.searchParams.get("scope")).toBe("openid email profile");
@@ -141,7 +203,7 @@ describe("OIDC flow with a mocked IdP", () => {
     expect(location.searchParams.get("client_id")).toBe(CLIENT_ID);
 
     const state = location.searchParams.get("state") ?? "";
-    const res = await callback(`code=abc&state=${state}`, oidcCookie);
+    const res = await callback(`code=abc&state=${state}`, oidcCookie, initialAdminEnv);
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toBe("/wiki");
     expect(setCookies(res)["__Host-libreno_oidc"]?.maxAge).toBe(0);
@@ -173,39 +235,5 @@ describe("OIDC flow with a mocked IdP", () => {
       expect(await countPersonalSpaces(legacy.id)).toBe(1);
     }
     expect(await db.query.users.findMany()).toHaveLength(1);
-  });
-
-  it("returns 403 and creates nothing when ALLOWED_EMAILS is empty", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const res = await loginWith({ ...oidcEnv, ALLOWED_EMAILS: "" });
-    expect(res.status).toBe(403);
-    expect(await db.query.users.findMany()).toHaveLength(0);
-    expect(await countSpaces()).toBe(0);
-    expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "allowlist_empty" });
-  });
-
-  it("signs in any email with ALLOWED_EMAILS=*", async () => {
-    idTokenClaims = { ...idTokenClaims, email: "alice@outside.test" };
-    const res = await loginWith({ ...oidcEnv, ALLOWED_EMAILS: "*" });
-    expect(res.status).toBe(303);
-    const user = await db.query.users.findFirst({ where: eq(users.oidcSubject, "sub-1") });
-    expect(user?.email).toBe("alice@outside.test");
-    expect(await countPersonalSpaces(user?.id ?? "")).toBe(1);
-  });
-
-  it("ends a signed-in session on its next refresh once ALLOWED_EMAILS is empty", async () => {
-    const res = await loginWith();
-    expect(res.status).toBe(303);
-    const cookies = sessionCookies(res);
-
-    const refreshed = await send(`${OIDC_ORIGIN}/auth/refresh`, {
-      method: "POST",
-      cookies,
-      env: { ...oidcEnv, ALLOWED_EMAILS: "" },
-    });
-    expect(refreshed.status).toBe(401);
-    // The session family is revoked: the refresh token no longer works with the allowlist restored.
-    const again = await send(`${OIDC_ORIGIN}/auth/refresh`, { method: "POST", cookies, env: oidcEnv });
-    expect(again.status).toBe(401);
   });
 });

@@ -51,6 +51,11 @@ export async function resetDb(): Promise<void> {
     env.DB.prepare("DELETE FROM folders"),
     env.DB.prepare("DELETE FROM space_members"),
     env.DB.prepare("DELETE FROM spaces"),
+    env.DB.prepare("DELETE FROM mfa_pending"),
+    env.DB.prepare("DELETE FROM mfa_recovery_codes"),
+    env.DB.prepare("DELETE FROM mfa_credentials"),
+    env.DB.prepare("DELETE FROM mfa_accounts"),
+    env.DB.prepare("DELETE FROM user_invitations"),
     env.DB.prepare("DELETE FROM users"),
   ]);
 }
@@ -70,8 +75,6 @@ export const oidcEnv: Partial<Bindings> = {
   OIDC_ISSUER: "https://idp.example.com",
   OIDC_CLIENT_ID: "libreno-client",
   OIDC_CLIENT_SECRET: "client-secret",
-  // Everyone the IdP signs in. Tests of the allowlist override it.
-  ALLOWED_EMAILS: "*",
 };
 
 // The configuration of the test environment, with overrides, for core.issueSession.
