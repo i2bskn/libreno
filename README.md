@@ -73,6 +73,7 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 | `OIDC_CLIENT_SECRET` | シークレット | `oidc`のとき必須 |
 | `INITIAL_ADMIN_EMAIL` | 変数 | `oidc`で使います。ユーザーがまだいないときに、このメールアドレスでログインした人が最初の管理者になります。ユーザーが1人でもいれば使われません |
 | `OIDC_REQUIRE_EMAIL_VERIFIED` | 変数 | 任意。`false`にするとIDトークンに`email_verified`が含まれない場合に限ってログインを通します |
+| `OIDC_REQUIRE_GOOGLE_HD` | 変数 | 任意。`oidc`で`true`にすると、初回ログイン（招待したユーザーとの紐付けと最初の管理者の作成）で、`@gmail.com`以外のアカウントにはIDトークンの空でない`hd`（Google Workspaceのドメイン）を必須にします。IdPがGoogle（またはGoogleだけを使うCloudflare Access）のときだけ使ってください。`true`と`false`以外の値では初回ログインを拒否します（500にはなりません） |
 | `SESSION_MAX_AGE_HOURS` | 変数 | 任意。Webのログインが続く上限（ログインからの時間数）。`1`〜`9600`。未設定なら`password`で720（30日）、`oidc`で24 |
 | `SESSION_IDLE_TIMEOUT_HOURS` | 変数 | 任意。Webを使わないままでいるとログアウトされるまでの時間数。`1`〜`9600`。使うたびに`SESSION_MAX_AGE_HOURS`の上限まで延びます。未設定なら使っていてもいなくても`SESSION_MAX_AGE_HOURS`で切れます |
 | `PASSWORD_MFA_POLICY` | 変数 | 任意。`password`での多要素認証の要否。`optional`（既定。各自が任意で設定）・`admins`（管理者は必須）・`all`（全員必須） |
@@ -86,6 +87,8 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 - `PASSWORD_MFA_KEY`が32バイトのbase64（`openssl rand -base64 32`の出力）ではない。
 - `INITIAL_ADMIN_EMAIL`がメールアドレスとして正しくない。
 
+`OIDC_REQUIRE_GOOGLE_HD`は例外で、誤った値では初回ログインだけを拒否します。
+
 `SESSION_MAX_AGE_HOURS`を変えると、次にログインしたときから効きます。`SESSION_IDLE_TIMEOUT_HOURS`はログイン中の人にもすぐに効きます。たとえば`SESSION_IDLE_TIMEOUT_HOURS`を`168`、`SESSION_MAX_AGE_HOURS`を`720`にすると、7日使わなければログアウトされ、使い続けていても30日でログインし直すことになります。
 
 ### OIDC認証にする
@@ -98,7 +101,11 @@ OIDC認証は招待制です。ログインできるのは、管理者が「ユ�
 
 IdPにはリダイレクトURLとして`<APP_ORIGIN>/auth/oidc/callback`を設定し、スコープには`openid`と`email`と`profile`を設定します。
 
-Cloudflare Accessを使う場合は、Access for SaaSのOIDCアプリとして登録します（Accessをアプリの前に置く構成には対応していません）。AccessのIDトークンには`email_verified`が含まれないので、`OIDC_REQUIRE_EMAIL_VERIFIED`を`false`にしてください。この設定を使うのは、Accessのログイン方法がすべてメールを検証済みのIdP（Googleなど）である場合だけにしてください。招待したユーザーとはメールアドレスで紐付くので、メールを検証しないログイン方法があると他人のアカウントに入れてしまいます。
+Cloudflare Accessを使う場合は、Access for SaaSのOIDCアプリとして登録します（Accessをアプリの前に置く構成には対応していません）。AccessのIDトークンには既定では`email_verified`が含まれないので、`OIDC_REQUIRE_EMAIL_VERIFIED`を`false`にしてください。この設定を使うのは、Accessのログイン方法がすべてメールを検証済みのIdP（Googleなど）である場合だけにしてください。招待したユーザーとはメールアドレスで紐付くので、メールを検証しないログイン方法があると他人のアカウントに入れてしまいます。
+
+AccessのOIDCアプリの設定にある「Add claims」で、Google IdPから取り込んだ`verified_email`を`email_verified`としてIDトークンに渡すと、`OIDC_REQUIRE_EMAIL_VERIFIED=false`を使わずに済む場合があります。値が真偽値の`true`で届くかはIdPとAccessの設定によります。設定を変えたら新しいユーザーのログインで確かめ、拒否されたら`OIDC_REQUIRE_EMAIL_VERIFIED=false`に戻してください。
+
+Accessで`OIDC_REQUIRE_GOOGLE_HD`を使う場合は、同じ「Add claims」でGoogle IdPから取り込んだ`hd`を同じ名前で渡してください。Gmailのアカウントには`hd`がないので、このクレームはRequiredにしないでください。
 
 パスワード認証からOIDC認証に切り替えるときは、ユーザーがすでにいるので`INITIAL_ADMIN_EMAIL`は使われません。切り替える前に、各ユーザーのメールアドレスがIdPのメールアドレスと一致しているか確かめてください。一致した人は初回のOIDCログインで紐付きます。特に管理者のメールアドレスが一致していないと、誰もユーザーを追加できなくなります。ユーザーのメールアドレスはあとから変えられないので、一致しない人はIdPのメールアドレスで追加し直してください。
 

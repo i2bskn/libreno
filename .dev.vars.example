@@ -39,6 +39,12 @@ JWT_SECRET=
 # When the claim is present it must still be true. Review this setting whenever OIDC_ISSUER changes.
 # OIDC_REQUIRE_EMAIL_VERIFIED=false
 
+# Optional for AUTH_MODE=oidc. "true" makes the first login (linking an invited user or creating the first admin)
+# require a non-empty hd claim (the Google Workspace domain) for accounts other than @gmail.com. Use it only when the
+# IdP is Google, or Cloudflare Access with Google as the only login method, passing hd as a claim.
+# Values other than "true" and "false" reject every first login.
+# OIDC_REQUIRE_GOOGLE_HD=true
+
 # Optional. How long a web session lasts from the sign-in, in hours (1 to 9600).
 # Defaults to 720 (30 days) with AUTH_MODE=password and 24 with AUTH_MODE=oidc.
 # SESSION_MAX_AGE_HOURS=720

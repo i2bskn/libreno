@@ -7,6 +7,7 @@ import type { Bindings } from "../src/env";
 import {
   countPersonalSpaces,
   countSpaces,
+  countTable,
   createUser,
   createUserWithoutSpace,
   db,
@@ -22,6 +23,8 @@ const ISSUER = oidcEnv.OIDC_ISSUER ?? "";
 const CLIENT_ID = oidcEnv.OIDC_CLIENT_ID ?? "";
 // The first admin of an empty deployment signs in with this email.
 const initialAdminEnv: Partial<Bindings> = { ...oidcEnv, INITIAL_ADMIN_EMAIL: "alice@example.com" };
+const hdEnv: Partial<Bindings> = { ...oidcEnv, OIDC_REQUIRE_GOOGLE_HD: "true" };
+const HD_REJECTED = "oidc link rejected by OIDC_REQUIRE_GOOGLE_HD";
 
 beforeEach(resetDb);
 
@@ -235,5 +238,92 @@ describe("OIDC flow with a mocked IdP", () => {
       expect(await countPersonalSpaces(legacy.id)).toBe(1);
     }
     expect(await db.query.users.findMany()).toHaveLength(1);
+  });
+  describe("OIDC_REQUIRE_GOOGLE_HD", () => {
+    async function invitedPartner() {
+      await createUser({ email: "staff@partner.example", password: null });
+      idTokenClaims = { ...idTokenClaims, sub: "sub-1", email: "staff@partner.example", name: "Staff" };
+    }
+
+    async function expectRejectedLink(env: Partial<Bindings>) {
+      const res = await loginWith(env);
+      expect(res.status).toBe(403);
+      expect(Object.keys(setCookies(res))).toEqual(["__Host-libreno_oidc"]);
+      const staff = await db.query.users.findFirst({ where: eq(users.email, "staff@partner.example") });
+      expect(staff?.oidcSubject).toBeNull();
+      expect(await countTable("sessions")).toBe(0);
+    }
+
+    it("rejects linking an invited non-Gmail account without hd", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await invitedPartner();
+      await expectRejectedLink(hdEnv);
+      expect(warn).toHaveBeenCalledWith(HD_REJECTED, { operation: "link", hd: "undefined" });
+      expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_allowed" });
+    });
+
+    it("links an invited non-Gmail account with hd", async () => {
+      await invitedPartner();
+      idTokenClaims = { ...idTokenClaims, hd: "partner.example" };
+      const res = await loginWith(hdEnv);
+      expect(res.status).toBe(303);
+      const staff = await db.query.users.findFirst({ where: eq(users.email, "staff@partner.example") });
+      expect(staff?.oidcSubject).toBe("sub-1");
+    });
+
+    it.each([
+      { hd: "", type: "string" },
+      { hd: "  ", type: "string" },
+      { hd: 123, type: "number" },
+    ])("rejects an empty or non-string hd ($hd)", async ({ hd, type }) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await invitedPartner();
+      idTokenClaims = { ...idTokenClaims, hd };
+      await expectRejectedLink(hdEnv);
+      expect(warn).toHaveBeenCalledWith(HD_REJECTED, { operation: "link", hd: type });
+      expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_allowed" });
+    });
+
+    it("links an invited Gmail account without hd", async () => {
+      await createUser({ email: "someone@gmail.com", password: null });
+      idTokenClaims = { ...idTokenClaims, sub: "sub-1", email: "someone@gmail.com", name: "Someone" };
+      expect((await loginWith(hdEnv)).status).toBe(303);
+      const someone = await db.query.users.findFirst({ where: eq(users.email, "someone@gmail.com") });
+      expect(someone?.oidcSubject).toBe("sub-1");
+    });
+
+    it("rejects creating the first admin without hd and creates them with hd", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const env = { ...hdEnv, INITIAL_ADMIN_EMAIL: "alice@example.com" };
+      const rejected = await loginWith(env);
+      expect(rejected.status).toBe(403);
+      expect(await db.query.users.findMany()).toHaveLength(0);
+      expect(await countSpaces()).toBe(0);
+      expect(await countTable("sessions")).toBe(0);
+      expect(warn).toHaveBeenCalledWith(HD_REJECTED, { operation: "create", hd: "undefined" });
+      expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_allowed" });
+
+      idTokenClaims = { ...idTokenClaims, hd: "example.com" };
+      expect((await loginWith(env)).status).toBe(303);
+      const alice = await db.query.users.findFirst({ where: eq(users.oidcSubject, "sub-1") });
+      expect(alice).toMatchObject({ role: "admin", email: "alice@example.com" });
+    });
+
+    it("rejects every first login when the value is invalid", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      await invitedPartner();
+      idTokenClaims = { ...idTokenClaims, hd: "partner.example" };
+      await expectRejectedLink({ ...oidcEnv, OIDC_REQUIRE_GOOGLE_HD: "TRUE" });
+      expect(error).toHaveBeenCalledWith("invalid OIDC_REQUIRE_GOOGLE_HD");
+    });
+
+    it("lets a linked user sign in again without hd", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await createUserWithoutSpace({ email: "staff@partner.example", oidc: { issuer: ISSUER, subject: "sub-1" } });
+      idTokenClaims = { ...idTokenClaims, sub: "sub-1", email: "staff@partner.example", name: "Staff" };
+      expect((await loginWith(hdEnv)).status).toBe(303);
+      expect(warn).not.toHaveBeenCalledWith(HD_REJECTED, expect.anything());
+    });
   });
 });
