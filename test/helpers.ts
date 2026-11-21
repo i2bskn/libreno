@@ -2,7 +2,7 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { createDb, type Db } from "@i2bskn/workers-app-core";
+import { createDb, loadConfig, type Config, type Db } from "@i2bskn/workers-app-core";
 import {
   createTestHelpers,
   PASSWORD,
@@ -73,6 +73,13 @@ export const oidcEnv: Partial<Bindings> = {
   // Everyone the IdP signs in. Tests of the allowlist override it.
   ALLOWED_EMAILS: "*",
 };
+
+// The configuration of the test environment, with overrides, for core.issueSession.
+export function testConfig(overrides: Partial<Bindings> = {}): Config {
+  const result = loadConfig({ ...env, ...overrides });
+  if (!result.ok) throw new Error(`invalid test configuration: ${result.invalid.join(", ")}`);
+  return result.config;
+}
 
 // A user with their personal space, created in one batch like the userCreatedStatements hook of src/core.ts.
 export function createUser(params: {

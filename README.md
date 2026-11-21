@@ -73,9 +73,13 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 | `OIDC_CLIENT_SECRET` | シークレット | `oidc`のとき必須 |
 | `ALLOWED_EMAILS` | 変数 | `oidc`では実質必須。ログインを許可するメールアドレスとドメイン（カンマ区切り）。空なら誰もログインできません。`*`ですべての人を許可します |
 | `OIDC_REQUIRE_EMAIL_VERIFIED` | 変数 | 任意。`false`にするとIDトークンに`email_verified`が含まれない場合に限ってログインを通します |
+| `SESSION_MAX_AGE_HOURS` | 変数 | 任意。Webのログインが続く上限（ログインからの時間数）。`1`〜`9600`。未設定なら`password`で720（30日）、`oidc`で24 |
+| `SESSION_IDLE_TIMEOUT_HOURS` | 変数 | 任意。Webを使わないままでいるとログアウトされるまでの時間数。`1`〜`9600`。使うたびに`SESSION_MAX_AGE_HOURS`の上限まで延びます。未設定なら使っていてもいなくても`SESSION_MAX_AGE_HOURS`で切れます |
 | `PDF_RENDERER` | 変数 | 任意。`browser`にするとページのPDFをサーバー（Browser Rendering）で作ります。未設定ならブラウザの印刷機能を使います |
 
 設定に誤りがあると、すべてのリクエストが500になります。
+
+`SESSION_MAX_AGE_HOURS`を変えると、次にログインしたときから効きます。`SESSION_IDLE_TIMEOUT_HOURS`はログイン中の人にもすぐに効きます。たとえば`SESSION_IDLE_TIMEOUT_HOURS`を`168`、`SESSION_MAX_AGE_HOURS`を`720`にすると、7日使わなければログアウトされ、使い続けていても30日でログインし直すことになります。
 
 ### OIDC認証にする
 

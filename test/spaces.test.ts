@@ -23,6 +23,7 @@ import {
   send,
   sessionCookies,
   type SessionCookies,
+  testConfig,
 } from "./helpers";
 
 const T0 = Date.UTC(2026, 9, 1);
@@ -565,7 +566,7 @@ describe("personal space backfill at login", () => {
 
   it("creates a missing personal space on POST /auth/refresh", async () => {
     const legacy = await createUserWithoutSpace({ email: "legacy@example.com" });
-    const session = await core.issueSession(appDb, legacy.id, "password", T0);
+    const session = await core.issueSession(appDb, legacy.id, testConfig(), T0);
     const cookies = { "__Host-libreno_rt": session.refreshToken };
 
     const res = await send("/auth/refresh", { method: "POST", cookies });
@@ -575,7 +576,7 @@ describe("personal space backfill at login", () => {
 
   it("creates a missing personal space on GET /auth/login with a refresh cookie", async () => {
     const legacy = await createUserWithoutSpace({ email: "legacy@example.com" });
-    const session = await core.issueSession(appDb, legacy.id, "password", T0);
+    const session = await core.issueSession(appDb, legacy.id, testConfig(), T0);
     const cookies = { "__Host-libreno_rt": session.refreshToken };
 
     const res = await send("/auth/login?next=/", { cookies });

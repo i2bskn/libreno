@@ -27,6 +27,14 @@ JWT_SECRET=
 # When the claim is present it must still be true. Review this setting whenever OIDC_ISSUER changes.
 # OIDC_REQUIRE_EMAIL_VERIFIED=false
 
+# Optional. How long a web session lasts from the sign-in, in hours (1 to 9600).
+# Defaults to 720 (30 days) with AUTH_MODE=password and 24 with AUTH_MODE=oidc.
+# SESSION_MAX_AGE_HOURS=720
+
+# Optional. A web session also ends when it has not been used for this many hours (1 to 9600);
+# each use extends it up to SESSION_MAX_AGE_HOURS. Unset means no idle timeout.
+# SESSION_IDLE_TIMEOUT_HOURS=168
+
 # Optional. "browser" makes the PDFs of pages on the server with Browser Rendering (the BROWSER binding in
 # wrangler.jsonc); anything else, or unset, leaves it to the print dialog of the browser.
 # This does not work with `wrangler dev`: the local browser binding has no Quick Actions, so the request fails.
