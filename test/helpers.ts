@@ -2,7 +2,7 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { createDb, loadConfig, type Config, type Db } from "@i2bskn/workers-app-core";
+import { createDb, loadConfig, type Config, type Db, type PasswordHashConfig } from "@i2bskn/workers-app-core";
 import {
   createTestHelpers,
   PASSWORD,
@@ -84,14 +84,22 @@ export function testConfig(overrides: Partial<Bindings> = {}): Config {
   return result.config;
 }
 
-// A user with their personal space, created in one batch like the userCreatedStatements hook of src/core.ts.
+// The password hash of the tests, the same as PASSWORD_HASH_ALGORITHM and PASSWORD_PBKDF2_ITERATIONS of
+// vitest.config.ts. The default scrypt takes about 150ms of CPU per hash, which makes the tests several times slower;
+// the tests do not depend on the hash. test/setup-login.test.ts signs in with scrypt once.
+export const TEST_HASH_CONFIG: PasswordHashConfig = { algorithm: "pbkdf2", iterations: 10000 };
+
+// A user with their personal space, created in one batch like the userCreatedStatements hook of src/core.ts. The
+// password is hashed with TEST_HASH_CONFIG unless hashConfig is given.
 export function createUser(params: {
   email: string;
   role?: "admin" | "member";
   password?: string | null;
+  hashConfig?: PasswordHashConfig;
   createdAt?: number;
 }): Promise<UserRow> {
   return helpers.createUser({
+    hashConfig: TEST_HASH_CONFIG,
     ...params,
     userCreatedStatements: (d1, id, now) => [insertPersonalSpaceStatement(d1, id, now)],
   });
@@ -109,10 +117,12 @@ export async function countPersonalSpaces(userId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
-// Inserts a user without a personal space, like one created by code older than the spaces migration.
+// Inserts a user without a personal space, like one created by code older than the spaces migration. The password is
+// hashed with TEST_HASH_CONFIG unless hashConfig is given.
 export async function createUserWithoutSpace(params: {
   email: string;
   role?: "admin" | "member";
+  hashConfig?: PasswordHashConfig;
   createdAt?: number;
   oidc?: { issuer: string; subject: string };
 }): Promise<UserRow> {
@@ -120,6 +130,7 @@ export async function createUserWithoutSpace(params: {
     email: params.email,
     role: params.role,
     password: params.oidc ? null : PASSWORD,
+    hashConfig: params.hashConfig ?? TEST_HASH_CONFIG,
     createdAt: params.createdAt,
   });
   if (!params.oidc) return user;

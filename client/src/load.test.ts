@@ -10,8 +10,9 @@ import type {
   TrashedPage,
   User,
 } from "../../src/api/types";
-import { createApiClient, createApiFetch } from "./api";
+import { createApiClient, createApiFetch, unexpectedResponseMessage } from "./api";
 import {
+  CONNECTION_ERROR,
   loadArchiveView,
   loadBacklinks,
   loadFolderView,
@@ -78,9 +79,10 @@ function setup(routes: Record<string, Reply[]>) {
     return reply();
   });
   const redirectToLogin = vi.fn<(url: string) => void>();
-  const client = createApiClient(createApiFetch({ fetch, redirectToLogin, currentPath: () => "/" }));
+  const apiFetch = createApiFetch({ fetch, redirectToLogin, currentPath: () => "/" });
+  const client = createApiClient(apiFetch);
   const calls = (url: string) => fetch.mock.calls.filter(([input]) => String(input) === url).length;
-  return { client, fetch, redirectToLogin, calls };
+  return { apiFetch, client, fetch, redirectToLogin, calls };
 }
 
 const unauthorized = apiError(401, "ログインしてください");
@@ -794,26 +796,55 @@ describe("loadUsersView", () => {
   };
 
   it("shows the users and the auth mode", async () => {
-    const { client } = setup({ "/api/v1/users": [json(200, { users: [USER], auth_mode: "oidc" })] });
-    expect(await loadUsersView(client)).toEqual({ kind: "ready", data: { users: [USER], authMode: "oidc" } });
+    const { apiFetch } = setup({ "/api/v1/users": [json(200, { users: [USER], auth_mode: "oidc" })] });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "ready", data: { users: [USER], authMode: "oidc" } });
   });
 
   it("is an error with the API message on 403", async () => {
-    const { client } = setup({ "/api/v1/users": [apiError(403, "管理者の権限が必要です")] });
-    expect(await loadUsersView(client)).toEqual({ kind: "error", message: "管理者の権限が必要です" });
+    const { apiFetch } = setup({ "/api/v1/users": [apiError(403, "管理者の権限が必要です")] });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "error", message: "管理者の権限が必要です" });
   });
 
   it("is an error on 404", async () => {
-    const { client } = setup({ "/api/v1/users": [apiError(404, "見つかりません")] });
-    expect(await loadUsersView(client)).toEqual({ kind: "error", message: "見つかりません" });
+    const { apiFetch } = setup({ "/api/v1/users": [apiError(404, "見つかりません")] });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "error", message: "見つかりません" });
+  });
+
+  it.each([
+    { name: "the body is not JSON", reply: () => new Response("ok", { status: 200 }) },
+    { name: "users is not an array", reply: json(200, { users: null, auth_mode: "oidc" }) },
+    { name: "auth_mode is not a string", reply: json(200, { users: [USER], auth_mode: 1 }) },
+  ])("is an error on 200 when $name", async ({ reply }) => {
+    const { apiFetch } = setup({ "/api/v1/users": [reply] });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "error", message: unexpectedResponseMessage(200) });
+  });
+
+  it("is a connection error when fetch rejects", async () => {
+    const { apiFetch } = setup({
+      "/api/v1/users": [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+      ],
+    });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "error", message: CONNECTION_ERROR });
+  });
+
+  it("is a connection error when the refresh fails with 5xx", async () => {
+    const { apiFetch, redirectToLogin } = setup({
+      "/api/v1/users": [unauthorized],
+      "/auth/refresh": [() => new Response(null, { status: 503 })],
+    });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "error", message: CONNECTION_ERROR });
+    expect(redirectToLogin).not.toHaveBeenCalled();
   });
 
   it("moves to the login page when the list stays 401 after the refresh", async () => {
-    const { client, redirectToLogin } = setup({
+    const { apiFetch, redirectToLogin } = setup({
       "/api/v1/users": [unauthorized, unauthorized],
       "/auth/refresh": [() => new Response(null, { status: 401 })],
     });
-    expect(await loadUsersView(client)).toEqual({ kind: "redirecting" });
+    expect(await loadUsersView(apiFetch)).toEqual({ kind: "redirecting" });
     expect(redirectToLogin).toHaveBeenCalledTimes(1);
   });
 });

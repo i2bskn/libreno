@@ -1,6 +1,5 @@
 import { createCore, describeError, type CoreHooks } from "@i2bskn/workers-app-core";
 import { attachmentKey } from "./attachments/service";
-import { googleHdSetting, satisfiesGoogleHd } from "./auth/google-hd";
 import type { Bindings } from "./env";
 import { registerTools } from "./mcp/tools";
 import { insertPersonalSpaceStatement } from "./spaces/queries";
@@ -14,23 +13,6 @@ type DeleteData = { attachmentIds: string[] };
 const R2_DELETE_BATCH = 1000;
 
 const hooks: CoreHooks<Bindings, DeleteData> = {
-  // Called by the core only before linking an invited user (operation "link") or creating the first admin
-  // ("create"), after the ID token is verified. Returning false makes the core answer 403 and write nothing.
-  // With OIDC_REQUIRE_GOOGLE_HD=true, accounts other than Gmail need a non-empty hd claim. An invalid value rejects
-  // to be safe: only new links stop, and linked users keep signing in (the core does not call this hook for them).
-  async beforeOidcUserLinkOrCreate({ operation, env, email, claims }) {
-    const setting = googleHdSetting(env.OIDC_REQUIRE_GOOGLE_HD);
-    if (setting === "off") return true;
-    if (setting === "invalid") {
-      console.error("invalid OIDC_REQUIRE_GOOGLE_HD");
-      return false;
-    }
-    const allowed = satisfiesGoogleHd(email, claims);
-    // Only the type of hd is logged, never the claim values or the email.
-    if (!allowed) console.warn("oidc link rejected by OIDC_REQUIRE_GOOGLE_HD", { operation, hd: typeof claims.hd });
-    return allowed;
-  },
-
   // Every new user gets a personal space, in the same batch as the INSERT of the user. The statement inserts
   // nothing unless the user exists, so it also holds when the INSERT of the setup inserts nothing.
   userCreatedStatements: (d1, userId, now) => [insertPersonalSpaceStatement(d1, userId, now)],

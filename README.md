@@ -51,7 +51,8 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 
 ### 動作環境
 
-- Workersの無料プランで動きます。ただしパスワードのハッシュ（PBKDF2を10万回）にCPU時間を1回16〜32ms使うので、無料プランの上限（1リクエスト10ms）を超えます。ログインがCPU時間の上限で失敗する場合はWorkers Paidを使ってください。
+- Workersの無料プランでも動きますが、パスワードのハッシュは1回で無料プランのCPU時間の上限（1リクエスト10ms）を超えます（既定のscryptで約150〜200ms。`PASSWORD_HASH_ALGORITHM=pbkdf2`の10万回なら16〜56ms）。2026年11月の計測では無料プランでも打ち切られませんでしたが、保証はありません。ログインがCPU時間の上限で失敗する場合は`pbkdf2`にして回数（`PASSWORD_PBKDF2_ITERATIONS`）を下げるか、Workers Paidを使ってください。OIDC認証ではパスワードのハッシュを使いません。
+- 方式を変えても既存のパスワードのハッシュは作り直されません。scryptから`pbkdf2`に戻しても、既存のscryptのハッシュを確かめるCPU時間はパスワードを設定し直すまで変わりません。既存のユーザーがいる間に方式を変えるときの注意は[更新する](#更新する)を参照してください。
 - MCPは接続するたびにCPU時間を20〜40ms使い、ファイルの添付では1回60ms以上使うこともあるので、無料プランの上限を超えます。MCPを使う場合はWorkers Paidを使ってください。
 - Webからの添付ファイルのアップロードは10MBのファイルでもCPU時間が4〜7msで、無料プランの上限に収まります（ファイルをメモリに読まずにR2へ流すため）。
 - そのページへリンクしているページを探すため、ページを開くたびに見られるページの本文をすべてD1から読みます（読み取り行数は1回あたりページ数とほぼ同じです）。ページが1,000件なら、1日5,000回ページを開くと無料プランの上限（1日500万行）に達します。
@@ -68,7 +69,7 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 | `JWT_SECRET` | シークレット | 必須。32文字以上 |
 | `AUTH_MODE` | 変数 | `password`（既定）または`oidc` |
 | `APP_ORIGIN` | 変数 | ブラウザで開くOrigin（例: `https://wiki.example.com`）。`oidc`のとき必須。`password`ではパスキー（WebAuthn）を使う場合に必要 |
-| `OIDC_ISSUER` | 変数 | `oidc`のとき必須。IdPのissuer |
+| `OIDC_ISSUER` | 変数 | `oidc`のとき必須。IdPのissuerそのもの。`/.well-known/`を含むURLは設定エラーになります |
 | `OIDC_CLIENT_ID` | 変数 | `oidc`のとき必須 |
 | `OIDC_CLIENT_SECRET` | シークレット | `oidc`のとき必須 |
 | `INITIAL_ADMIN_EMAIL` | 変数 | `oidc`で使います。ユーザーがまだいないときに、このメールアドレスでログインした人が最初の管理者になります。ユーザーが1人でもいれば使われません |
@@ -78,6 +79,8 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 | `SESSION_IDLE_TIMEOUT_HOURS` | 変数 | 任意。Webを使わないままでいるとログアウトされるまでの時間数。`1`〜`9600`。使うたびに`SESSION_MAX_AGE_HOURS`の上限まで延びます。未設定なら使っていてもいなくても`SESSION_MAX_AGE_HOURS`で切れます |
 | `PASSWORD_MFA_POLICY` | 変数 | 任意。`password`での多要素認証の要否。`optional`（既定。各自が任意で設定）・`admins`（管理者は必須）・`all`（全員必須） |
 | `PASSWORD_MFA_KEY` | シークレット | 任意。`password`で認証アプリ（TOTP）を使う場合に設定します。`openssl rand -base64 32`で生成した値を使ってください。変えると登録済みの認証アプリが使えなくなります |
+| `PASSWORD_HASH_ALGORITHM` | 変数 | 任意。新しく設定するパスワードのハッシュの方式。`scrypt`（既定）または`pbkdf2`。`AUTH_MODE`に関係なく、それ以外の値は設定エラーになります |
+| `PASSWORD_PBKDF2_ITERATIONS` | 変数 | 任意。`pbkdf2`のときのハッシュの回数。`10000`〜`100000`。未設定なら`100000`。`AUTH_MODE`に関係なく検証され、`scrypt`のときも範囲外は設定エラーになります |
 | `PDF_RENDERER` | 変数 | 任意。`browser`にするとページのPDFをサーバー（Browser Rendering）で作ります。未設定ならブラウザの印刷機能を使います |
 
 設定に誤りがあると、すべてのリクエストが500になります。たとえば次の場合です。
@@ -86,6 +89,9 @@ Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の
 - `PASSWORD_MFA_POLICY`が`admins`か`all`なのに、有効なHTTPSの`APP_ORIGIN`も`PASSWORD_MFA_KEY`もない（多要素認証を登録する方法がない）。
 - `PASSWORD_MFA_KEY`が32バイトのbase64（`openssl rand -base64 32`の出力）ではない。
 - `INITIAL_ADMIN_EMAIL`がメールアドレスとして正しくない。
+- `PASSWORD_HASH_ALGORITHM`が`scrypt`・`pbkdf2`のどちらでもない。
+- `PASSWORD_PBKDF2_ITERATIONS`が`10000`〜`100000`の整数ではない。
+- `OIDC_ISSUER`が`/.well-known/`を含む。
 
 `OIDC_REQUIRE_GOOGLE_HD`は例外で、誤った値では初回ログインだけを拒否します。
 
@@ -254,6 +260,8 @@ git push
 `wrangler.jsonc`を自分で変更している場合は、マージで競合することがあります。
 
 **添付ファイルの機能が入る前の版から更新するときも、先にCloudflareのダッシュボードでR2を有効にしてください。** R2を有効にせずに更新してデプロイが失敗したときは、R2を有効にしてから再デプロイすれば動きます。先に適用されたマイグレーションは表を追加するだけなので、そのままで問題ありません。
+
+**パスワードのハッシュがscryptになる版から更新するとき:** 既存のユーザーのパスワードはPBKDF2のまま使えます。更新後に新しく設定したパスワードと、登録されていないメールアドレスでのログインの確認はscryptになります。既存のユーザーがいる間は、ログインの応答時間から登録済みのメールアドレスが分かることがあります。避けたい場合は更新の前に変数`PASSWORD_HASH_ALGORITHM`を`pbkdf2`にしてください。このとき`PASSWORD_PBKDF2_ITERATIONS`は設定せず、既定の100000のままにしてください。既存のハッシュは100000回で作られているので、回数を変えると応答時間の差がまた生じます。OIDC認証ではパスワードのハッシュを使わないので関係ありません。
 
 ## バックアップ
 

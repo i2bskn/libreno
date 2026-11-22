@@ -24,7 +24,6 @@ const CLIENT_ID = oidcEnv.OIDC_CLIENT_ID ?? "";
 // The first admin of an empty deployment signs in with this email.
 const initialAdminEnv: Partial<Bindings> = { ...oidcEnv, INITIAL_ADMIN_EMAIL: "alice@example.com" };
 const hdEnv: Partial<Bindings> = { ...oidcEnv, OIDC_REQUIRE_GOOGLE_HD: "true" };
-const HD_REJECTED = "oidc link rejected by OIDC_REQUIRE_GOOGLE_HD";
 
 beforeEach(resetDb);
 
@@ -258,7 +257,7 @@ describe("OIDC flow with a mocked IdP", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       await invitedPartner();
       await expectRejectedLink(hdEnv);
-      expect(warn).toHaveBeenCalledWith(HD_REJECTED, { operation: "link", hd: "undefined" });
+      expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "google_hd_missing", hd: "undefined" });
       expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_allowed" });
     });
 
@@ -280,7 +279,7 @@ describe("OIDC flow with a mocked IdP", () => {
       await invitedPartner();
       idTokenClaims = { ...idTokenClaims, hd };
       await expectRejectedLink(hdEnv);
-      expect(warn).toHaveBeenCalledWith(HD_REJECTED, { operation: "link", hd: type });
+      expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "google_hd_missing", hd: type });
       expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_allowed" });
     });
 
@@ -300,7 +299,7 @@ describe("OIDC flow with a mocked IdP", () => {
       expect(await db.query.users.findMany()).toHaveLength(0);
       expect(await countSpaces()).toBe(0);
       expect(await countTable("sessions")).toBe(0);
-      expect(warn).toHaveBeenCalledWith(HD_REJECTED, { operation: "create", hd: "undefined" });
+      expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "google_hd_missing", hd: "undefined" });
       expect(warn).toHaveBeenCalledWith("oidc login rejected", { reason: "not_allowed" });
 
       idTokenClaims = { ...idTokenClaims, hd: "example.com" };
@@ -315,7 +314,7 @@ describe("OIDC flow with a mocked IdP", () => {
       await invitedPartner();
       idTokenClaims = { ...idTokenClaims, hd: "partner.example" };
       await expectRejectedLink({ ...oidcEnv, OIDC_REQUIRE_GOOGLE_HD: "TRUE" });
-      expect(error).toHaveBeenCalledWith("invalid OIDC_REQUIRE_GOOGLE_HD");
+      expect(error).toHaveBeenCalledWith("invalid configuration", { invalid: ["OIDC_REQUIRE_GOOGLE_HD"] });
     });
 
     it("lets a linked user sign in again without hd", async () => {
@@ -323,7 +322,10 @@ describe("OIDC flow with a mocked IdP", () => {
       await createUserWithoutSpace({ email: "staff@partner.example", oidc: { issuer: ISSUER, subject: "sub-1" } });
       idTokenClaims = { ...idTokenClaims, sub: "sub-1", email: "staff@partner.example", name: "Staff" };
       expect((await loginWith(hdEnv)).status).toBe(303);
-      expect(warn).not.toHaveBeenCalledWith(HD_REJECTED, expect.anything());
+      expect(warn).not.toHaveBeenCalledWith(
+        "oidc login rejected",
+        expect.objectContaining({ reason: "google_hd_missing" }),
+      );
     });
   });
 });
