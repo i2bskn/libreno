@@ -43,7 +43,7 @@ Cloudflare Workers・D1・R2の上で動きます。「Deploy to Cloudflare」�
 
 Web画面（React）は`wrangler.jsonc`の`build.command`で`wrangler deploy`の前に自動でビルドされます。Workers Buildsでビルドコマンドを設定する必要はありません。
 
-デプロイには`pnpm run deploy`（`scripts/deploy.mjs`）が使われます。マイグレーションを適用してから`wrangler deploy`を実行し、新しいコードが動く前に表ができているようにします。初回でD1がまだないときだけは、D1・KV・R2を自動で作る`wrangler deploy`を先に実行してからマイグレーションを適用します（`wrangler d1 migrations apply`は既存のD1を探すだけで、作らないため）。表ができるまでの数秒間はWorkerが表のない状態で動きますが、まだ誰も使っていないので影響はありません。
+デプロイには`pnpm run deploy`（[@i2bskn/workers-deploy](https://github.com/i2bskn/workers-deploy)の`workers-deploy`コマンド）が使われます。マイグレーションを適用してから`wrangler deploy`を実行し、新しいコードが動く前に表ができているようにします。初回でD1がまだないときだけは、D1・KV・R2を自動で作る`wrangler deploy`を先に実行してからマイグレーションを適用します（`wrangler d1 migrations apply`は既存のD1を探すだけで、作らないため）。表ができるまでの数秒間はWorkerが表のない状態で動きますが、まだ誰も使っていないので影響はありません。
 
 セットアップ画面では`JWT_SECRET`を入力します。`openssl rand -hex 32`で生成した値を使ってください。変更すると全員がログアウトします。
 
