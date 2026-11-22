@@ -15,6 +15,12 @@ export default defineConfig(async () => {
                 // An empty D1 for the test of migration 0011 (test/migration-0011.test.ts), which applies the
                 // migrations itself. setup.ts applies nothing to it.
                 d1Databases: ["MIGRATION_DB"],
+                // The login rate limit of wrangler.jsonc (5 per minute per email address) with a limit no test reaches:
+                // the tests sign in as the same users many times a minute. The limit itself is tested in
+                // @i2bskn/workers-app-core.
+                ratelimits: {
+                  LOGIN_RATE_LIMITER: { namespace_id: "4201", simple: { limit: 1_000_000, period: 60 } },
+                },
                 bindings: {
                   TEST_MIGRATIONS: migrations,
                   AUTH_MODE: "password",

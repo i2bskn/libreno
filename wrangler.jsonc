@@ -65,5 +65,16 @@
   ],
   // Browser Rendering (Browser Run), used to make PDFs of pages only when the PDF_RENDERER variable is
   // "browser" (src/pdf/renderer.ts). Declaring it costs nothing: only the browser time used is billed.
-  "browser": { "binding": "BROWSER" }
+  "browser": { "binding": "BROWSER" },
+  "ratelimits": [
+    {
+      // Limits password sign-ins (POST /auth/login) to 5 per minute per email address; more return 429
+      // (@i2bskn/workers-app-core). The count is kept per Cloudflare location and is approximate.
+      // namespace_id is any positive integer unique among the Rate Limiting bindings of the account:
+      // Workers that use the same one share the counts.
+      "name": "LOGIN_RATE_LIMITER",
+      "namespace_id": "4201",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ]
 }
