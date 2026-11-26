@@ -1,0 +1,408 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const features = [
+  {
+    title: "書くのはAIに任せる",
+    body: "ClaudeなどのアプリからMCPで接続して「経費申請の手順をまとめて」と頼めば、AIがページを書いて保存します。既存のページを読んで直すことも、関係するページを探すこともAIに任せられます。",
+    href: `${base}/getting-started/mcp/`,
+    link: "MCPで接続する",
+  },
+  {
+    title: "読む人はブラウザで開くだけ",
+    body: "チームの人はWebでページを読んだり検索したりします。開いたときは読むための表示なので、うっかり書き換えることはありません。直したいときは編集ボタンから編集できます。",
+    href: `${base}/guides/pages/`,
+    link: "ページ",
+  },
+  {
+    title: "見せる相手はスペースで分ける",
+    body: "スペースごとに見られる人を分けられます。AIもWebと同じ権限で動くので、見られないページをAIが読むことはありません。",
+    href: `${base}/guides/spaces/`,
+    link: "スペース",
+  },
+  {
+    title: "自分たちのCloudflareアカウントで動く",
+    body: "Cloudflare Workers・D1・R2の上で動きます。「Deploy to Cloudflare」ボタンで自分のアカウントにデプロイでき、データは自分のD1とR2に置かれます。",
+    href: `${base}/getting-started/deploy/`,
+    link: "デプロイする",
+  },
+];
+
+// From the narrowest to the widest, in the order used to decide whether a move widens who can see a page.
+const spaces = [
+  { name: "個人", who: "本人だけ", use: "個人のメモ" },
+  { name: "管理者のみ", who: "管理者だけ", use: "経理や人事など" },
+  { name: "メンバー指定", who: "管理者が選んだメンバーと管理者", use: "プロジェクトのチームなど" },
+  { name: "全員", who: "全員", use: "チーム全体で共有すること" },
+];
+
+const next = [
+  { n: "01", title: "デプロイする", href: `${base}/getting-started/deploy/` },
+  { n: "02", title: "動作環境", href: `${base}/getting-started/requirements/` },
+  { n: "03", title: "MCPで接続する", href: `${base}/getting-started/mcp/` },
+  { n: "04", title: "設定", href: `${base}/admin/configuration/` },
+];
+---
+
+<section class="gh-sec not-content" aria-labelledby="gh-feat-title">
+  <p class="gh-kicker">How it works</p>
+  <h2 id="gh-feat-title">AIが書いて、チームが読む。</h2>
+  <ul class="gh-feat">
+    {
+      features.map((f, i) => (
+        <li>
+          <span class="gh-feat-n" aria-hidden="true">
+            {String(i + 1).padStart(2, "0")}
+          </span>
+          <h3>{f.title}</h3>
+          <p set:html={f.body} />
+          <a href={f.href}>{f.link}</a>
+        </li>
+      ))
+    }
+  </ul>
+</section>
+
+<section class="gh-sec not-content" aria-labelledby="gh-space-title">
+  <p class="gh-kicker">Spaces</p>
+  <h2 id="gh-space-title">見られる人は4段階</h2>
+  <p class="gh-lead">
+    スペースの種類は作成後に変えられません。見られる人が増えるスペースへページやフォルダを移すときは、MCPではAIが利用者に確認してから移します。
+  </p>
+  <ol class="gh-scale">
+    {
+      spaces.map((s, i) => (
+        <li style={`--lv:${i + 1}`}>
+          <span class="gh-scale-bar" aria-hidden="true" />
+          <span class="gh-scale-name">{s.name}</span>
+          <span class="gh-scale-who">{s.who}</span>
+          <span class="gh-scale-use">{s.use}</span>
+        </li>
+      ))
+    }
+  </ol>
+  <p class="gh-scale-axis" aria-hidden="true"><span>狭い</span><span>見られる人</span><span>広い</span></p>
+</section>
+
+<nav class="gh-sec gh-next not-content" aria-labelledby="gh-next-title">
+  <p class="gh-kicker">Start here</p>
+  <h2 id="gh-next-title">この順で読む</h2>
+  <ol>
+    {
+      next.map((s) => (
+        <li>
+          <a href={s.href}>
+            <span class="gh-next-n">{s.n}</span>
+            <span class="gh-next-t">{s.title}</span>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+          </a>
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<footer class="gh-foot not-content">
+  <span class="gh-foot-name" translate="no">libreno</span>
+  <ul>
+    <li><a href="https://docs.i2bskn.com/">ドキュメント一覧</a></li>
+    <li><a href="https://github.com/i2bskn/libreno">GitHub</a></li>
+    <li><a href="https://github.com/i2bskn/libreno/blob/main/LICENSE">Apache License 2.0</a></li>
+  </ul>
+</footer>
+
+<style>
+  .gh-sec {
+    padding-block: 4rem 1rem;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+  .gh-kicker {
+    margin: 0 0 0.75rem;
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gh-accent-text);
+  }
+  h2 {
+    max-width: 36rem;
+    margin: 0;
+    font-size: clamp(1.625rem, 1.25rem + 1.4vw, 2.25rem);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--sl-color-white);
+    font-feature-settings: "palt";
+    word-break: auto-phrase;
+    text-wrap: balance;
+  }
+  .gh-lead {
+    max-width: 40rem;
+    margin: 1rem 0 0;
+    font-size: var(--sl-text-sm);
+    line-height: 1.8;
+    color: var(--sl-color-gray-2);
+  }
+
+  .gh-feat {
+    display: grid;
+    gap: 1px;
+    margin: 2.5rem 0 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--gh-line);
+    border-radius: var(--gh-radius);
+    background: var(--gh-line);
+    overflow: clip;
+  }
+  @media (min-width: 40rem) {
+    .gh-feat {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 72rem) {
+    .gh-feat {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .gh-feat li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.5rem 1.4rem 1.4rem;
+    background: var(--sl-color-black);
+  }
+  .gh-feat-n {
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--gh-accent-text);
+  }
+  .gh-feat h3 {
+    margin: 0.25rem 0 0;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--sl-color-white);
+    font-feature-settings: "palt";
+    word-break: auto-phrase;
+  }
+  .gh-feat p {
+    flex: 1;
+    margin: 0;
+    font-size: var(--sl-text-sm);
+    line-height: 1.8;
+    color: var(--sl-color-gray-2);
+  }
+  .gh-feat a {
+    align-self: flex-start;
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm);
+    font-weight: 500;
+    color: var(--sl-color-white);
+    text-decoration: underline;
+    text-decoration-color: var(--sl-color-accent);
+    text-underline-offset: 0.25em;
+  }
+  .gh-feat a:hover {
+    color: var(--gh-accent-text);
+  }
+
+  /* ---------- Spaces: a scale from the narrowest to the widest ---------- */
+
+  .gh-scale {
+    display: grid;
+    gap: 0.75rem;
+    margin: 2.5rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 48rem) {
+    .gh-scale {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: end;
+      gap: 1rem;
+    }
+  }
+  .gh-scale li {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    grid-template-areas:
+      "bar name"
+      "bar who"
+      "bar use";
+    column-gap: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--gh-line);
+    border-radius: var(--gh-radius);
+    background: var(--gh-surface);
+  }
+  @media (min-width: 48rem) {
+    .gh-scale li {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "bar"
+        "name"
+        "who"
+        "use";
+      align-content: end;
+      padding: 1rem 1.1rem 1.1rem;
+    }
+  }
+  .gh-scale-bar {
+    grid-area: bar;
+    align-self: center;
+    display: flex;
+    gap: 3px;
+    height: 0.5rem;
+  }
+  .gh-scale-bar::before {
+    content: "";
+    width: calc(var(--lv) * 25%);
+    border-radius: 999px;
+    background: var(--sl-color-accent);
+  }
+  .gh-scale-bar::after {
+    content: "";
+    flex: 1;
+    border-radius: 999px;
+    background: var(--gh-line);
+  }
+  @media (min-width: 48rem) {
+    .gh-scale-bar {
+      margin-bottom: 1.25rem;
+    }
+  }
+  .gh-scale-name {
+    grid-area: name;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+  .gh-scale-who {
+    grid-area: who;
+    font-size: var(--sl-text-sm);
+    line-height: 1.6;
+    color: var(--sl-color-gray-2);
+  }
+  .gh-scale-use {
+    grid-area: use;
+    margin-top: 0.2rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .gh-scale-axis {
+    display: none;
+  }
+  @media (min-width: 48rem) {
+    .gh-scale-axis {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0.9rem 0 0;
+      font-size: var(--sl-text-xs);
+      color: var(--sl-color-gray-3);
+    }
+    .gh-scale-axis span:nth-child(2) {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .gh-scale-axis span:nth-child(2)::before,
+    .gh-scale-axis span:nth-child(2)::after {
+      content: "";
+      flex: 1;
+      border-top: 1px solid var(--gh-line);
+    }
+  }
+
+  /* ---------- Start here ---------- */
+
+  .gh-next {
+    padding-bottom: 4rem;
+  }
+  .gh-next ol {
+    display: grid;
+    gap: 0.75rem;
+    margin: 2rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 40rem) {
+    .gh-next ol {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 72rem) {
+    .gh-next ol {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .gh-next a {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--gh-line);
+    border-radius: var(--gh-radius);
+    background: var(--gh-surface);
+    color: var(--sl-color-white);
+    text-decoration: none;
+    transition: border-color 160ms ease;
+  }
+  .gh-next a:hover,
+  .gh-next a:focus-visible {
+    border-color: var(--sl-color-accent);
+  }
+  .gh-next-n {
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--gh-accent-text);
+  }
+  .gh-next-t {
+    flex: 1;
+    font-weight: 500;
+  }
+  .gh-next svg {
+    color: var(--sl-color-gray-3);
+    transition: transform 160ms ease;
+  }
+  .gh-next a:hover svg {
+    transform: translateX(3px);
+    color: var(--gh-accent-text);
+  }
+
+  .gh-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+    padding-block: 1.5rem 0.5rem;
+    border-top: 1px solid var(--sl-color-hairline);
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .gh-foot-name {
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-2);
+  }
+  .gh-foot ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .gh-foot a {
+    display: inline-block;
+    padding-block: 0.8rem;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+  }
+  .gh-foot a:hover {
+    color: var(--gh-accent-text);
+  }
+</style>

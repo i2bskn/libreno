@@ -1,0 +1,442 @@
+---
+import { LinkButton } from "@astrojs/starlight/components";
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// The example request from the README: ask the AI to write up a procedure, and it saves the page.
+const lines = [
+  { md: "## 申請の流れ", kind: "h" },
+  { md: "1. 領収書を撮影して添付する", kind: "li" },
+  { md: "2. 申請フォームに金額を入れる", kind: "li" },
+  { md: "3. 上長の承認を待つ", kind: "li" },
+  { md: "[支払いの締め日](/pages/7f3a…)", kind: "link" },
+];
+---
+
+<section class="gh-hero not-content" aria-labelledby="_top">
+  <div class="gh-hero-copy">
+    <p class="gh-eyebrow">
+      <span class="gh-pill">セルフホスト</span>
+      <span class="gh-dot" aria-hidden="true"></span>
+      <span translate="no">Cloudflare Workers · D1 · R2 · MCP</span>
+    </p>
+    <h1 id="_top" data-page-title set:html={title} />
+    {tagline && <p class="gh-tagline" set:html={tagline} />}
+    {
+      actions.length > 0 && (
+        <div class="gh-actions">
+          {actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link: href, text, variant }) => (
+            <LinkButton {href} {variant} icon={icon?.name} class:list={[className]} {...attrs}>
+              {text}
+            </LinkButton>
+          ))}
+        </div>
+      )
+    }
+    <div class="gh-deploy">
+      <a class="gh-deploy-button" href="https://deploy.workers.cloudflare.com/?url=https://github.com/i2bskn/libreno">
+        <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare" width="166" height="32" />
+      </a>
+      <p>
+        自分のCloudflareアカウントにデプロイします。先にダッシュボードで<a href={`${base}/getting-started/deploy/`}
+          >R2を有効に</a
+        >してください。
+      </p>
+    </div>
+  </div>
+
+  <figure class="gh-flow" aria-labelledby="gh-flow-cap">
+    <figcaption id="gh-flow-cap" class="sr-only">
+      AIがMCPでページを書いて保存し、チームはブラウザでそのページを読む。
+    </figcaption>
+
+    <div class="gh-node">
+      <span class="gh-node-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="18" height="18"
+          ><path
+            d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5l-1.6-4.4L4 8.5l4.4-1.6z"
+            fill="currentColor"></path></svg
+        >
+      </span>
+      <span class="gh-node-who">AI<small>Claudeなど</small></span>
+      <q class="gh-bubble">経費申請の手順をまとめて</q>
+    </div>
+
+    <div class="gh-link" aria-hidden="true">
+      <span class="gh-link-line"></span>
+      <span class="gh-link-tag"><b>MCP</b> create_page</span>
+    </div>
+
+    <div class="gh-page">
+      <div class="gh-page-bar">
+        <span class="gh-page-space">全員</span>
+        <span class="gh-page-path">経理 /</span>
+      </div>
+      <p class="gh-page-title">経費申請の手順</p>
+      <ol class="gh-page-body" aria-hidden="true">
+        {
+          lines.map((l, i) => (
+            <li class={`gh-md gh-md-${l.kind}`} style={`--i:${i}`}>
+              {l.md}
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+
+    <div class="gh-link gh-link-read" aria-hidden="true">
+      <span class="gh-link-line"></span>
+      <span class="gh-link-tag"><b>Web</b> 読む・検索する</span>
+    </div>
+
+    <div class="gh-node gh-node-team">
+      <span class="gh-node-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"
+          ><circle cx="7" cy="7" r="2.6"></circle><circle cx="14" cy="8" r="2.1"></circle><path
+            d="M2.5 16c.6-2.7 2.3-4 4.5-4s3.9 1.3 4.5 4M12 12.2c2.2-.3 4.6.7 5.3 3.8"></path></svg
+        >
+      </span>
+      <span class="gh-node-who">チーム<small>ブラウザ</small></span>
+      <span class="gh-node-note">開いたときは読むための表示</span>
+    </div>
+  </figure>
+</section>
+
+<style>
+  .gh-hero {
+    display: grid;
+    gap: 3rem;
+    padding-block: 1.5rem 3rem;
+  }
+  .gh-hero > * {
+    min-width: 0;
+  }
+  @media (min-width: 62rem) {
+    .gh-hero {
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      align-items: center;
+      gap: 4rem;
+      padding-block: 3.5rem 4.5rem;
+    }
+  }
+
+  .gh-eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin: 0 0 1.5rem;
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-xs);
+    letter-spacing: 0.02em;
+    color: var(--sl-color-gray-3);
+  }
+  .gh-pill {
+    padding: 0.125rem 0.6rem;
+    border: 1px solid var(--gh-line);
+    border-radius: 999px;
+    font-family: var(--__sl-font);
+    color: var(--sl-color-gray-2);
+  }
+  .gh-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--sl-color-accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--sl-color-accent) 22%, transparent);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(2.125rem, 1.35rem + 3vw, 3.5rem);
+    font-weight: 600;
+    line-height: 1.22;
+    letter-spacing: 0;
+    color: var(--sl-color-white);
+    font-feature-settings: "palt";
+    word-break: auto-phrase;
+    text-wrap: balance;
+  }
+  .gh-tagline {
+    max-width: 34rem;
+    margin: 1.5rem 0 0;
+    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    line-height: 1.9;
+    color: var(--sl-color-gray-2);
+    word-break: auto-phrase;
+    text-wrap: pretty;
+  }
+
+  .gh-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    margin-top: 2rem;
+  }
+  .gh-actions :global(.sl-link-button.primary) {
+    background: var(--sl-color-accent);
+    border-color: var(--sl-color-accent);
+    color: var(--gh-on-accent);
+    font-weight: 600;
+  }
+  .gh-actions :global(.sl-link-button) {
+    border-radius: 999px;
+  }
+
+  .gh-deploy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    max-width: 34rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+  .gh-deploy-button {
+    flex: none;
+    display: inline-flex;
+    border-radius: 6px;
+  }
+  .gh-deploy-button img {
+    display: block;
+  }
+  .gh-deploy p {
+    flex: 1 1 14rem;
+    margin: 0;
+    font-size: var(--sl-text-sm);
+    line-height: 1.7;
+    color: var(--sl-color-gray-3);
+  }
+  .gh-deploy p a {
+    color: var(--sl-color-gray-2);
+    text-decoration-color: var(--sl-color-accent);
+    text-underline-offset: 0.22em;
+  }
+  .gh-deploy p a:hover {
+    color: var(--gh-accent-text);
+  }
+
+  /* ---------- Flow: the AI writes a page, the team reads it ---------- */
+
+  .gh-flow {
+    display: grid;
+    justify-items: center;
+    margin: 0;
+    padding: 1.5rem clamp(1rem, 3vw, 2rem);
+    border: 1px solid var(--gh-line);
+    border-radius: 16px;
+    background:
+      linear-gradient(var(--gh-grid) 1px, transparent 1px) 0 0 / 100% 24px,
+      linear-gradient(90deg, var(--gh-grid) 1px, transparent 1px) 0 0 / 24px 100%,
+      var(--gh-surface);
+  }
+  .gh-node {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.35rem 0.7rem;
+    width: min(100%, 22rem);
+  }
+  .gh-node-icon {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--gh-line);
+    border-radius: 50%;
+    background: var(--sl-color-black);
+    color: var(--gh-accent-text);
+  }
+  .gh-node-team .gh-node-icon {
+    color: var(--sl-color-white);
+  }
+  .gh-node-who {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+  .gh-node-who small {
+    font-size: var(--sl-text-xs);
+    font-weight: 400;
+    color: var(--sl-color-gray-3);
+  }
+  .gh-bubble,
+  .gh-node-note {
+    grid-column: 2;
+    justify-self: start;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+  .gh-bubble {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--gh-line);
+    border-radius: 4px 14px 14px 14px;
+    background: var(--sl-color-black);
+    quotes: "「" "」";
+  }
+
+  .gh-link {
+    position: relative;
+    display: grid;
+    place-items: center;
+    height: 3.25rem;
+  }
+  .gh-link-line {
+    position: absolute;
+    inset: 0 auto;
+    left: 50%;
+    width: 0;
+    border-left: 1.5px dashed color-mix(in srgb, var(--sl-color-accent) 70%, transparent);
+  }
+  .gh-link-line::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: -5px;
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid var(--sl-color-accent);
+    border-bottom: 1.5px solid var(--sl-color-accent);
+    transform: rotate(45deg);
+  }
+  .gh-link-tag {
+    position: relative;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--gh-line);
+    border-radius: 999px;
+    background: var(--gh-surface);
+    font-family: var(--__sl-font-mono);
+    font-size: var(--sl-text-2xs);
+    color: var(--sl-color-gray-3);
+    white-space: nowrap;
+  }
+  .gh-link-read .gh-link-tag {
+    font-family: var(--__sl-font);
+  }
+  .gh-link-tag b {
+    margin-right: 0.3rem;
+    font-family: var(--__sl-font-mono);
+    font-weight: 500;
+    color: var(--gh-accent-text);
+  }
+
+  .gh-page {
+    position: relative;
+    width: min(100%, 22rem);
+    padding: 1rem 1.15rem 1.2rem;
+    border: 1px solid var(--gh-line);
+    border-radius: 12px;
+    background: var(--sl-color-black);
+    box-shadow: 0 18px 40px -24px rgb(0 0 0 / 0.55);
+  }
+  .gh-page-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--sl-text-2xs);
+    color: var(--sl-color-gray-3);
+  }
+  .gh-page-space {
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+    color: var(--gh-accent-text);
+    font-weight: 500;
+  }
+  .gh-page-title {
+    margin: 0.6rem 0 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+  .gh-page-body {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0.75rem 0 0;
+    list-style: none;
+    border-top: 1px solid var(--sl-color-hairline);
+    font-family: var(--__sl-font-mono), var(--__sl-font);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--sl-color-gray-2);
+  }
+  .gh-md {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .gh-md-h {
+    color: var(--sl-color-white);
+    font-weight: 500;
+  }
+  .gh-md-link {
+    margin-top: 0.25rem;
+    color: var(--gh-accent-text);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .gh-hero-copy > *,
+    .gh-flow {
+      animation: gh-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    .gh-hero-copy > :nth-child(2) {
+      animation-delay: 60ms;
+    }
+    .gh-hero-copy > :nth-child(3) {
+      animation-delay: 120ms;
+    }
+    .gh-hero-copy > :nth-child(4) {
+      animation-delay: 180ms;
+    }
+    .gh-hero-copy > :nth-child(5) {
+      animation-delay: 240ms;
+    }
+    .gh-flow {
+      animation-delay: 160ms;
+    }
+    /* The AI writes the page one line at a time. */
+    .gh-md {
+      animation: gh-type 520ms steps(14, end) both;
+      animation-delay: calc(900ms + var(--i) * 380ms);
+    }
+    .gh-link-line {
+      animation: gh-draw 600ms ease-out both;
+      animation-delay: 600ms;
+      transform-origin: top;
+    }
+    .gh-link-read .gh-link-line {
+      animation-delay: calc(900ms + 5 * 380ms);
+    }
+  }
+  @keyframes gh-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @keyframes gh-type {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  @keyframes gh-draw {
+    from {
+      transform: scaleY(0);
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .gh-dot {
+      display: none;
+    }
+  }
+</style>

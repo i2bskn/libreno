@@ -1,0 +1,50 @@
+---
+// The Libreno symbol (src/brand.ts): the initial L that holds a page. The page is drawn in the accent.
+const { siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="gh-title" translate="no">
+  <svg class="gh-mark" viewBox="0 0 128 128" width="30" height="30" aria-hidden="true">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 24V88Q30 104 46 104H103" stroke="currentColor" stroke-width="15" />
+      <path d="M51 27H81Q99 27 99 45V77H68Q51 77 51 60Z" class="gh-mark-page" stroke-width="11" />
+      <path d="M67 45H82M67 58H78" class="gh-mark-page" stroke-width="6" />
+    </g>
+  </svg>
+  <span class="gh-name">libreno<span class="gh-scope"> docs</span></span>
+</a>
+
+<style>
+  .gh-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    color: var(--sl-color-white);
+    text-decoration: none;
+  }
+  .gh-mark {
+    flex: none;
+    color: var(--sl-color-white);
+  }
+  .gh-mark-page {
+    stroke: var(--sl-color-accent);
+  }
+  .gh-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--__sl-font-mono);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .gh-scope {
+    color: var(--sl-color-gray-3);
+  }
+  @media (max-width: 30rem) {
+    .gh-scope {
+      display: none;
+    }
+  }
+</style>
